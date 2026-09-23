@@ -1,0 +1,17 @@
+# CADENCIA - configuracao de build da Netlify
+# App single-file, sem build step. A pasta public/ e o site publicado.
+# A pasta versoes/ fica fora do publish: versionada no Git, nao vai para o ar.
+
+[build]
+  publish = "public"
+
+# HTML sempre revalidado: usuario pega a versao nova no primeiro reload.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
