@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#16191f">
+<title>CADÊNCIA — Treino de Tiro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#16191f; --bg2:#1d212a; --surface:#232834; --raise:#2b3140;
+    --line:#333a48; --line2:#3f4757;
+    --ink:#e9edf2; --dim:#9aa3b2; --faint:#6b7484;
+    --brass:#c79049; --brass-hi:#e2ab5d; --brass-dim:#8a6531;
+    --signal:#ff4d3d; --signal-dim:#7a261f;
+    --good:#57c98a; --warn:#e7b15a;
+    --display:'Oswald',ui-sans-serif,system-ui,sans-serif;
+    --body:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--body);
+    -webkit-font-smoothing:antialiased; line-height:1.45;
+    min-height:100vh; min-height:100dvh;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:0 16px 110px;}
+
+  /* Header */
+  header{
+    position:sticky; top:0; z-index:40; background:linear-gradient(180deg,#13161c, #13161cf2 70%, #13161c00);
+    backdrop-filter:blur(6px); padding:18px 16px 14px; border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex; align-items:baseline; gap:12px; max-width:760px; margin:0 auto;}
+  .brand h1{
+    font-family:var(--display); font-weight:700; letter-spacing:.22em; font-size:26px;
+    margin:0; text-transform:uppercase; color:var(--ink);
+  }
+  .brand h1 .x{color:var(--brass)}
+  .brand .tag{font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); font-family:var(--mono);}
+
+  /* Nav */
+  nav{position:fixed; left:0; right:0; bottom:0; z-index:50;
+    background:#12151b; border-top:1px solid var(--line);
+    display:flex; justify-content:center; gap:2px; padding:8px 8px calc(8px + env(safe-area-inset-bottom));}
+  nav button{
+    flex:1; max-width:170px; background:none; border:0; color:var(--faint); font-family:var(--display);
+    text-transform:uppercase; letter-spacing:.14em; font-size:12.5px; font-weight:600; padding:9px 4px 7px;
+    cursor:pointer; border-radius:9px; display:flex; flex-direction:column; align-items:center; gap:5px; transition:color .15s;
+  }
+  nav button .ic{font-size:18px; line-height:1}
+  nav button.on{color:var(--brass)}
+  nav button.on .ic{filter:drop-shadow(0 0 6px var(--brass-dim))}
+
+  /* Generic */
+  .view{display:none; animation:fade .25s ease}
+  .view.on{display:block}
+  @keyframes fade{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
+  h2.sec{font-family:var(--display); text-transform:uppercase; letter-spacing:.16em; font-size:15px;
+    color:var(--dim); font-weight:600; margin:26px 2px 12px; display:flex; align-items:center; gap:10px}
+  h2.sec::after{content:""; flex:1; height:1px; background:var(--line)}
+
+  .card{background:var(--bg2); border:1px solid var(--line); border-radius:14px; padding:16px;}
+  label.fld{display:block; margin:0 0 13px}
+  label.fld > span{display:block; font-size:11px; letter-spacing:.13em; text-transform:uppercase; color:var(--faint);
+    font-family:var(--mono); margin-bottom:6px}
+  select,input[type=text],input[type=number],textarea{
+    width:100%; background:var(--surface); border:1px solid var(--line2); color:var(--ink);
+    border-radius:10px; padding:11px 12px; font-size:15px; font-family:var(--body); outline:none;
+  }
+  select:focus,input:focus,textarea:focus{border-color:var(--brass); box-shadow:0 0 0 3px #c790491f}
+  .row{display:flex; gap:12px}
+  .row > *{flex:1}
+  .seg{display:flex; gap:0; background:var(--surface); border:1px solid var(--line2); border-radius:10px; overflow:hidden}
+  .seg button{flex:1; background:none; border:0; color:var(--dim); padding:11px 6px; font-size:13.5px; cursor:pointer;
+    font-family:var(--body); font-weight:600; transition:.12s}
+  .seg button.on{background:var(--brass); color:#1a1205}
+  .seg button + button{border-left:1px solid var(--line2)}
+
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:9px; width:100%;
+    background:var(--brass); color:#1a1205; border:0; border-radius:12px; padding:16px; font-family:var(--display);
+    text-transform:uppercase; letter-spacing:.14em; font-weight:700; font-size:17px; cursor:pointer; transition:.12s}
+  .btn:hover{background:var(--brass-hi)}
+  .btn:active{transform:translateY(1px)}
+  .btn.ghost{background:none; border:1px solid var(--line2); color:var(--ink)}
+  .btn.ghost:hover{border-color:var(--brass); color:var(--brass-hi)}
+  .btn.danger{background:none; border:1px solid var(--signal-dim); color:var(--signal)}
+  .btn.sm{padding:10px 14px; font-size:13px; width:auto}
+  .chip{display:inline-flex; gap:7px; align-items:center; font-family:var(--mono); font-size:12px; color:var(--dim);
+    background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:5px 11px}
+  .chip b{color:var(--brass-hi); font-weight:600}
+
+  /* Drill summary strip */
+  .summary{display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 4px}
+
+  /* RUN console */
+  .console{
+    position:fixed; inset:0; z-index:80; background:radial-gradient(120% 80% at 50% 0%, #1c2129, #0e1014);
+    display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px;
+  }
+  .console.on{display:flex}
+  .console.flash{animation:flash .14s ease}
+  @keyframes flash{0%{background:#fff} 100%{background:#0e1014}}
+  .state{font-family:var(--display); text-transform:uppercase; letter-spacing:.3em; font-size:20px; color:var(--dim);
+    min-height:26px; margin-bottom:8px}
+  .state.live{color:var(--signal)}
+  .clock{font-family:var(--mono); font-weight:800; font-variant-numeric:tabular-nums; font-size:clamp(58px,22vw,128px);
+    line-height:.95; letter-spacing:-.02em; color:var(--brass-hi); text-shadow:0 0 24px #c7904933}
+  .clock.live{color:var(--signal); text-shadow:0 0 30px #ff4d3d44}
+  .clock .u{font-size:.32em; color:var(--faint); letter-spacing:.05em; margin-left:6px}
+  .shotsfeed{margin:18px 0 4px; width:100%; max-width:340px; max-height:34vh; overflow:auto; font-family:var(--mono);}
+  .shotline{display:flex; justify-content:space-between; font-size:15px; padding:7px 12px; border-bottom:1px solid #ffffff0d;
+    animation:slidein .2s ease}
+  @keyframes slidein{from{opacity:0; transform:translateX(-8px)} to{opacity:1; transform:none}}
+  .shotline .n{color:var(--faint)}
+  .shotline .t{color:var(--ink)}
+  .shotline .s{color:var(--brass-hi)}
+  .console .controls{position:fixed; left:0; right:0; bottom:0; padding:18px 24px calc(20px + env(safe-area-inset-bottom));
+    display:flex; gap:12px; max-width:520px; margin:0 auto}
+  .lvl{position:fixed; top:18px; left:24px; right:24px; height:5px; background:#ffffff10; border-radius:9px; overflow:hidden}
+  .lvl > i{display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--good),var(--warn),var(--signal)); transition:width .04s}
+  .lvl .mark{position:absolute; top:-4px; width:2px; height:13px; background:var(--ink)}
+
+  /* Review */
+  .stat{display:flex; flex-direction:column; gap:3px; background:var(--surface); border:1px solid var(--line);
+    border-radius:12px; padding:13px 14px}
+  .stat .k{font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); font-family:var(--mono)}
+  .stat .v{font-family:var(--mono); font-weight:800; font-size:24px; color:var(--ink); font-variant-numeric:tabular-nums}
+  .stat .v.brass{color:var(--brass-hi)} .stat .v.sig{color:var(--signal)} .stat .v.good{color:var(--good)}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
+
+  /* Drills list */
+  .drill{background:var(--bg2); border:1px solid var(--line); border-radius:13px; padding:14px 15px; margin-bottom:10px}
+  .drill .top{display:flex; justify-content:space-between; align-items:start; gap:10px}
+  .drill h3{font-family:var(--display); text-transform:uppercase; letter-spacing:.08em; font-size:17px; margin:0; font-weight:600}
+  .drill p{margin:7px 0 10px; color:var(--dim); font-size:13.5px}
+  .drill .meta{display:flex; flex-wrap:wrap; gap:7px}
+
+  /* History */
+  .hrow{display:flex; align-items:center; gap:12px; padding:13px 4px; border-bottom:1px solid var(--line); cursor:pointer}
+  .hrow:hover{background:#ffffff05}
+  .hrow .hf{font-family:var(--mono); font-weight:800; font-size:19px; color:var(--brass-hi); min-width:62px; text-align:right}
+  .hrow .mid{flex:1; min-width:0}
+  .hrow .mid .t1{font-family:var(--display); text-transform:uppercase; letter-spacing:.05em; font-size:14.5px}
+  .hrow .mid .t2{font-size:11.5px; color:var(--faint); font-family:var(--mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .pb{color:var(--good); font-size:10px; font-family:var(--mono); letter-spacing:.1em; border:1px solid var(--good); border-radius:5px; padding:1px 5px}
+  canvas#chart{width:100%; height:170px; display:block}
+  .empty{text-align:center; color:var(--faint); padding:40px 20px; font-size:14px}
+  .empty .big{font-size:30px; opacity:.5; margin-bottom:10px}
+
+  .toggle{display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line)}
+  .toggle:last-child{border-bottom:0}
+  .toggle span{font-size:14.5px}
+  .sw{position:relative; width:46px; height:26px; flex:none}
+  .sw input{opacity:0; width:0; height:0}
+  .sw .tr{position:absolute; inset:0; background:var(--surface); border:1px solid var(--line2); border-radius:99px; transition:.18s}
+  .sw .tr::before{content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; background:var(--dim); border-radius:50%; transition:.18s}
+  .sw input:checked + .tr{background:var(--brass-dim); border-color:var(--brass)}
+  .sw input:checked + .tr::before{transform:translateX(20px); background:var(--brass-hi)}
+  .note{font-size:12.5px; color:var(--faint); line-height:1.55; margin:10px 2px 0}
+  .banner{background:#2a1c10; border:1px solid var(--brass-dim); color:var(--brass-hi); border-radius:11px; padding:11px 13px;
+    font-size:12.5px; margin:12px 0; display:none}
+  .banner.on{display:block}
+  input[type=range]{-webkit-appearance:none; width:100%; height:5px; background:var(--surface); border-radius:9px; outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--brass); border:2px solid #1a1205; cursor:pointer}
+  .hidden{display:none!important}
+  @media (max-width:420px){ .brand .tag{display:none} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>CADÊN<span class="x">CIA</span></h1>
+    <span class="tag">cronômetro &amp; registro de treino</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ========= TREINAR ========= -->
+  <section class="view on" id="v-run">
+    <div id="setup">
+      <h2 class="sec">Preparar treino</h2>
+      <div class="card">
+        <label class="fld">
+          <span>Drill</span>
+          <select id="selDrill"></select>
+        </label>
+        <div class="summary" id="drillSummary"></div>
+        <div class="row" style="margin-top:6px">
+          <label class="fld">
+            <span>Arma</span>
+            <select id="selWeapon">
+              <option>Pistola</option><option>Revólver</option><option>Carabina</option><option>Espingarda</option>
+            </select>
+          </label>
+          <label class="fld">
+            <span>Calibre</span>
+            <input id="inCal" list="cals" placeholder="ex: 9mm" value="9mm">
+            <datalist id="cals">
+              <option>.22 LR</option><option>.380 ACP</option><option>9mm</option><option>.38 SPL</option>
+              <option>.357 Mag</option><option>.40 S&amp;W</option><option>.45 ACP</option>
+              <option>.223 / 5.56</option><option>.308</option><option>12</option>
+            </datalist>
+          </label>
+        </div>
+        <label class="fld">
+          <span>Distância (metros)</span>
+          <input id="inDist" type="number" inputmode="decimal" value="7" step="0.5" min="0">
+        </label>
+
+        <h2 class="sec" style="margin-top:8px">Cronômetro</h2>
+        <div class="toggle"><span>Detectar tiros pelo microfone</span>
+          <label class="sw"><input type="checkbox" id="tgMic" checked><span class="tr"></span></label></div>
+        <label class="fld" id="sensWrap" style="margin-top:14px">
+          <span>Sensibilidade do microfone — <b id="sensVal" style="color:var(--brass-hi)">55</b></span>
+          <input type="range" id="inSens" min="5" max="95" value="55">
+        </label>
+        <div class="banner" id="micBanner"></div>
+      </div>
+      <button class="btn" id="btnStart" style="margin-top:16px">▶ Iniciar (Standby)</button>
+      <p class="note">Largada com atraso aleatório entre <b id="dlyTxt">1,5 e 4,0 s</b>. Ao apito: tela pisca, celular vibra e toca o beep. Ajuste o intervalo em <b>Config</b>.</p>
+    </div>
+
+    <!-- Review (após o stop) -->
+    <div id="review" class="hidden">
+      <h2 class="sec">Resultado</h2>
+      <div class="grid3">
+        <div class="stat"><span class="k">Tempo total</span><span class="v brass" id="rTotal">—</span></div>
+        <div class="stat"><span class="k">1º tiro</span><span class="v" id="rFirst">—</span></div>
+        <div class="stat"><span class="k">Tiros</span><span class="v" id="rShots">—</span></div>
+      </div>
+      <div id="splitsBox" class="card" style="margin-top:10px; padding:6px 14px"></div>
+
+      <h2 class="sec">Pontuação</h2>
+      <div class="card">
+        <div class="seg" id="scoreMode" style="margin-bottom:14px">
+          <button data-m="simple" class="on">Acertos / Erros</button>
+          <button data-m="ipsc">Zonas IPSC</button>
+        </div>
+        <div id="scoreSimple">
+          <div class="row">
+            <label class="fld"><span>Acertos no alvo</span><input type="number" id="inHits" inputmode="numeric" value="0" min="0"></label>
+            <label class="fld"><span>Fora / erros</span><input type="number" id="inMiss" inputmode="numeric" value="0" min="0"></label>
+          </div>
+        </div>
+        <div id="scoreIpsc" class="hidden">
+          <div class="row">
+            <label class="fld"><span>Zona A (+5)</span><input type="number" id="inA" inputmode="numeric" value="0" min="0"></label>
+            <label class="fld"><span>Zona C (+3)</span><input type="number" id="inC" inputmode="numeric" value="0" min="0"></label>
+          </div>
+          <div class="row">
+            <label class="fld"><span>Zona D (+1)</span><input type="number" id="inD" inputmode="numeric" value="0" min="0"></label>
+            <label class="fld"><span>Miss (−10)</span><input type="number" id="inMs" inputmode="numeric" value="0" min="0"></label>
+          </div>
+        </div>
+        <div class="grid2" style="margin-top:4px">
+          <div class="stat"><span class="k">Precisão</span><span class="v good" id="rAcc">—</span></div>
+          <div class="stat"><span class="k">Hit factor</span><span class="v sig" id="rHF">—</span></div>
+        </div>
+        <p class="note">Hit factor = pontos ÷ tempo. É o número que junta <b>velocidade e acerto</b> — atirar rápido errando derruba o índice.</p>
+        <label class="fld" style="margin-top:14px"><span>Observações</span><textarea id="inNotes" rows="2" placeholder="condição, postura, munição…"></textarea></label>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn ghost" id="btnDiscard">Descartar</button>
+        <button class="btn" id="btnSave">Salvar treino</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========= DRILLS ========= -->
+  <section class="view" id="v-drills">
+    <h2 class="sec">Biblioteca de drills</h2>
+    <div id="drillList"></div>
+    <button class="btn ghost" id="btnNewDrill" style="margin-top:6px">+ Criar drill</button>
+
+    <div id="drillForm" class="card hidden" style="margin-top:16px">
+      <input type="hidden" id="dfId">
+      <label class="fld"><span>Nome</span><input type="text" id="dfName" placeholder="ex: Saque rápido"></label>
+      <label class="fld"><span>Descrição</span><textarea id="dfDesc" rows="2" placeholder="ex: 2 no peito, 1 na cabeça a 7m"></textarea></label>
+      <div class="row">
+        <label class="fld"><span>Tiros esperados (0 = livre)</span><input type="number" id="dfShots" value="3" min="0"></label>
+        <label class="fld"><span>Distância (m)</span><input type="number" id="dfDist" value="7" step="0.5"></label>
+      </div>
+      <label class="fld"><span>Par time (s) — 0 = sem par</span><input type="number" id="dfPar" value="0" step="0.1" min="0"></label>
+      <div class="row">
+        <button class="btn ghost sm" id="btnCancelDrill">Cancelar</button>
+        <button class="btn sm" id="btnSaveDrill">Salvar drill</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========= HISTÓRICO ========= -->
+  <section class="view" id="v-hist">
+    <h2 class="sec">Progresso</h2>
+    <div class="card">
+      <label class="fld" style="margin:0"><span>Drill</span><select id="histDrill"></select></label>
+      <div class="seg" id="metricMode" style="margin-top:12px">
+        <button data-k="hf" class="on">Hit factor</button>
+        <button data-k="total">Tempo total</button>
+        <button data-k="first">1º tiro</button>
+      </div>
+      <canvas id="chart" style="margin-top:14px"></canvas>
+      <div id="pbBox" class="summary"></div>
+    </div>
+    <h2 class="sec">Sessões</h2>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn ghost sm" id="btnCSV">Exportar CSV</button>
+      <button class="btn ghost sm" id="btnJSON">Exportar JSON</button>
+      <button class="btn ghost sm" id="btnImport">Importar</button>
+    </div>
+    <input type="file" id="fileImport" accept="application/json" class="hidden">
+    <div id="histList"></div>
+  </section>
+
+  <!-- ========= CONFIG ========= -->
+  <section class="view" id="v-cfg">
+    <h2 class="sec">Largada</h2>
+    <div class="card">
+      <div class="row">
+        <label class="fld"><span>Atraso mínimo (s)</span><input type="number" id="cfgDlyMin" value="1.5" step="0.1" min="0"></label>
+        <label class="fld"><span>Atraso máximo (s)</span><input type="number" id="cfgDlyMax" value="4" step="0.1" min="0"></label>
+      </div>
+      <div class="toggle"><span>Som (beep)</span><label class="sw"><input type="checkbox" id="cfgSound" checked><span class="tr"></span></label></div>
+      <div class="toggle"><span>Vibração</span><label class="sw"><input type="checkbox" id="cfgVibrate" checked><span class="tr"></span></label></div>
+      <div class="toggle"><span>Piscar a tela</span><label class="sw"><input type="checkbox" id="cfgFlash" checked><span class="tr"></span></label></div>
+      <div class="toggle"><span>Beep no fim do par time</span><label class="sw"><input type="checkbox" id="cfgParBeep" checked><span class="tr"></span></label></div>
+    </div>
+    <h2 class="sec">Dados</h2>
+    <div class="card">
+      <p class="note" style="margin-top:0">Tudo fica guardado neste navegador. Use <b>Exportar CSV</b> (no Histórico) como base para planilha — é o caminho pra, no futuro, sincronizar e adicionar mais atiradores.</p>
+      <button class="btn danger sm" id="btnWipe" style="margin-top:10px; width:100%">Apagar todos os dados</button>
+    </div>
+    <p class="note">CADÊNCIA v1 — protótipo. Microfone exige abrir via <b>HTTPS</b> (não funciona com duplo-clique no arquivo). Veja instruções no chat.</p>
+  </section>
+
+</div>
+
+<!-- RUN CONSOLE overlay -->
+<div class="console" id="console">
+  <div class="lvl" id="lvlBar"><i id="lvlFill"></i></div>
+  <div class="state" id="conState">STANDBY</div>
+  <div class="clock" id="conClock">0.00<span class="u">s</span></div>
+  <div class="shotsfeed" id="feed"></div>
+  <div class="controls">
+    <button class="btn danger" id="btnStop" style="display:none">■ Parar</button>
+    <button class="btn ghost" id="btnAbort">Cancelar</button>
+  </div>
+</div>
+
+<!-- ========= NAV ========= -->
+<nav>
+  <button data-v="run" class="on"><span class="ic">⏱</span>Treinar</button>
+  <button data-v="drills"><span class="ic">◎</span>Drills</button>
+  <button data-v="hist"><span class="ic">▦</span>Histórico</button>
+  <button data-v="cfg"><span class="ic">⚙</span>Config</button>
+</nav>
+
+<script>
+"use strict";
+
+/* ---------------- storage ---------------- */
+const KEY="cadencia_v1";
+const DEFAULT_DRILLS=[
+  {id:"moz", builtin:true, name:"Mozambique", desc:"2 tiros no peito + 1 na cabeça. Saque e dispare.", shots:3, dist:7, par:3.0},
+  {id:"bill",builtin:true, name:"Bill Drill", desc:"6 tiros no centro, o mais rápido possível mantendo o acerto.", shots:6, dist:7, par:2.0},
+  {id:"elpres",builtin:true,name:"El Presidente", desc:"De costas: gira, saca, 2 tiros em cada um dos 3 alvos, recarrega, repete.", shots:12, dist:10, par:10.0},
+  {id:"failure",builtin:true,name:"Failure to Stop", desc:"Variante do Mozambique focada em precisão na cabeça.", shots:3, dist:7, par:3.5},
+  {id:"saque",builtin:true,name:"Saque e 1 disparo", desc:"Tempo puro de saque até o primeiro tiro.", shots:1, dist:7, par:1.5},
+  {id:"dot",builtin:true,name:"Dot Torture", desc:"50 tiros de precisão em alvos pequenos. Sem pressa, sem erro.", shots:50, dist:3, par:0},
+  {id:"livre",builtin:true,name:"Treino livre", desc:"Conta os tiros que vierem, sem número fixo.", shots:0, dist:7, par:0}
+];
+const DEFAULT_SETTINGS={dlyMin:1.5, dlyMax:4, sound:true, vibrate:true, flash:true, parBeep:true, mic:true, sens:55};
+
+function load(){
+  let db;
+  try{ db=JSON.parse(localStorage.getItem(KEY)); }catch(e){ db=null; }
+  if(!db||typeof db!=="object") db={};
+  if(!Array.isArray(db.drills)||!db.drills.length) db.drills=JSON.parse(JSON.stringify(DEFAULT_DRILLS));
+  if(!Array.isArray(db.sessions)) db.sessions=[];
+  db.settings=Object.assign({},DEFAULT_SETTINGS,db.settings||{});
+  return db;
+}
+let DB=load();
+let MEM_ONLY=false;
+function save(){
+  try{ localStorage.setItem(KEY,JSON.stringify(DB)); }
+  catch(e){ MEM_ONLY=true; } // preview sandboxes block storage; keep in memory
+}
+
+/* ---------------- helpers ---------------- */
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+const fmt=(n,d=2)=>Number(n).toFixed(d).replace(".",",");
+const drillById=id=>DB.drills.find(d=>d.id===id);
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+/* ---------------- navigation ---------------- */
+$$("nav button").forEach(b=>b.onclick=()=>{
+  const v=b.dataset.v;
+  $$("nav button").forEach(x=>x.classList.toggle("on",x===b));
+  $$(".view").forEach(x=>x.classList.remove("on"));
+  $("#v-"+v).classList.add("on");
+  if(v==="hist") renderHistory();
+  if(v==="drills") renderDrills();
+  window.scrollTo(0,0);
+});
+
+/* ---------------- setup screen ---------------- */
+function fillDrillSelect(sel,withLivre=true){
+  sel.innerHTML="";
+  DB.drills.forEach(d=>{ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name; sel.appendChild(o); });
+}
+function refreshSetup(){
+  fillDrillSelect($("#selDrill"));
+  showDrillSummary();
+  const s=DB.settings;
+  $("#dlyTxt").textContent=fmt(s.dlyMin,1)+" e "+fmt(s.dlyMax,1)+" s";
+  $("#tgMic").checked=s.mic; $("#inSens").value=s.sens; $("#sensVal").textContent=s.sens;
+  $("#sensWrap").classList.toggle("hidden",!s.mic);
+}
+function showDrillSummary(){
+  const d=drillById($("#selDrill").value); if(!d) return;
+  const box=$("#drillSummary");
+  box.innerHTML="";
+  const add=(label,val)=>{ const c=document.createElement("span"); c.className="chip"; c.innerHTML=label+" <b>"+val+"</b>"; box.appendChild(c); };
+  if(d.desc){ const p=document.createElement("p"); p.className="note"; p.style.margin="2px 2px 8px"; p.style.width="100%"; p.textContent=d.desc; box.appendChild(p); }
+  add("Tiros", d.shots>0?d.shots:"livre");
+  add("Distância", fmt(d.dist,1)+" m");
+  if(d.par>0) add("Par", fmt(d.par,1)+" s");
+  $("#inDist").value=d.dist;
+}
+$("#selDrill").onchange=showDrillSummary;
+$("#tgMic").onchange=e=>{ DB.settings.mic=e.target.checked; $("#sensWrap").classList.toggle("hidden",!e.target.checked); save(); };
+$("#inSens").oninput=e=>{ DB.settings.sens=+e.target.value; $("#sensVal").textContent=e.target.value; save(); };
+
+/* ---------------- AUDIO + MIC ---------------- */
+let AC=null, analyser=null, micStream=null, micData=null;
+function ensureAC(){ if(!AC){ AC=new (window.AudioContext||window.webkitAudioContext)(); } if(AC.state==="suspended") AC.resume(); return AC; }
+function beep(freq=1000,dur=0.18,vol=0.5){
+  if(!DB.settings.sound) return;
+  try{ const ac=ensureAC(); const o=ac.createOscillator(), g=ac.createGain();
+    o.type="square"; o.frequency.value=freq; g.gain.value=vol;
+    o.connect(g); g.connect(ac.destination); o.start();
+    g.gain.setValueAtTime(vol,ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+dur);
+    o.stop(ac.currentTime+dur+0.02);
+  }catch(e){}
+}
+async function startMic(){
+  try{
+    const ac=ensureAC();
+    micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    const src=ac.createMediaStreamSource(micStream);
+    analyser=ac.createAnalyser(); analyser.fftSize=1024;
+    micData=new Uint8Array(analyser.fftSize);
+    src.connect(analyser);
+    return true;
+  }catch(e){ return false; }
+}
+function stopMic(){
+  if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
+  analyser=null;
+}
+function micLevel(){ // 0..1 peak deviation
+  if(!analyser) return 0;
+  analyser.getByteTimeDomainData(micData);
+  let peak=0;
+  for(let i=0;i<micData.length;i++){ const v=Math.abs(micData[i]-128); if(v>peak) peak=v; }
+  return peak/128;
+}
+
+/* ---------------- RUN logic ---------------- */
+let run=null; // {drill, beepAt, shots:[], raf, parTimer, started, useMic, lastShotT}
+const MIN_SPLIT=0.05; // 50ms debounce (sem automático no Brasil, splits não passam disso)
+
+$("#btnStart").onclick=startRun;
+$("#btnAbort").onclick=()=>endConsole(true);
+$("#btnStop").onclick=stopRun;
+
+async function startRun(){
+  const d=drillById($("#selDrill").value); if(!d) return;
+  ensureAC(); // unlock audio on user gesture
+  run={drill:d, beepAt:0, shots:[], started:false, raf:null, parTimer:null, lastShotT:-999,
+       useMic:DB.settings.mic, weapon:$("#selWeapon").value, cal:$("#inCal").value.trim(), dist:+$("#inDist").value};
+  $("#setup").classList.add("hidden"); $("#review").classList.add("hidden");
+  const c=$("#console"); c.classList.add("on");
+  $("#feed").innerHTML=""; $("#conClock").innerHTML='0.00<span class="u">s</span>';
+  $("#conState").textContent="STANDBY"; $("#conState").classList.remove("live");
+  $("#conClock").classList.remove("live"); $("#btnStop").style.display="none";
+  $("#lvlBar").style.display=run.useMic?"block":"none";
+
+  // mic
+  $("#micBanner").classList.remove("on");
+  if(run.useMic){
+    const ok=await startMic();
+    if(!ok){
+      run.useMic=false; $("#lvlBar").style.display="none";
+      $("#micBanner").innerHTML="Microfone indisponível (permissão negada ou aberto sem HTTPS). Treino segue por <b>tempo total</b> — pare no último tiro.";
+    }
+  }
+
+  // random delay
+  const s=DB.settings;
+  const delay=(s.dlyMin + Math.random()*Math.max(0,(s.dlyMax-s.dlyMin)))*1000;
+  setTimeout(go, delay);
+}
+
+function go(){
+  if(!run) return;
+  run.beepAt=performance.now(); run.started=true;
+  beep(1000,0.2,0.6);
+  if(DB.settings.vibrate && navigator.vibrate) navigator.vibrate([90,40,90]);
+  const c=$("#console");
+  if(DB.settings.flash){ c.classList.remove("flash"); void c.offsetWidth; c.classList.add("flash"); }
+  $("#conState").textContent="GO"; $("#conState").classList.add("live");
+  $("#conClock").classList.add("live"); $("#btnStop").style.display="";
+  // par beep
+  if(run.drill.par>0 && DB.settings.parBeep){
+    run.parTimer=setTimeout(()=>beep(1500,0.25,0.5), run.drill.par*1000);
+  }
+  loop();
+}
+
+function loop(){
+  if(!run||!run.started) return;
+  const now=(performance.now()-run.beepAt)/1000;
+  $("#conClock").innerHTML=fmt(now,2)+'<span class="u">s</span>';
+  if(run.useMic){
+    const lv=micLevel();
+    $("#lvlFill").style.width=Math.min(100,lv*140)+"%";
+    const thresh=1-(DB.settings.sens/100); // higher sens -> lower threshold
+    if(lv>=thresh && (now-run.lastShotT)>MIN_SPLIT){
+      run.lastShotT=now; registerShot(now);
+    }
+  }
+  run.raf=requestAnimationFrame(loop);
+}
+
+function registerShot(t){
+  run.shots.push(t);
+  const i=run.shots.length;
+  const split = i>1 ? t-run.shots[i-2] : null;
+  const el=document.createElement("div"); el.className="shotline";
+  el.innerHTML='<span class="n">#'+i+'</span><span class="t">'+fmt(t,2)+'s</span><span class="s">'+(split!==null?("+"+fmt(split,2)):"1º tiro")+'</span>';
+  const feed=$("#feed"); feed.appendChild(el); feed.scrollTop=feed.scrollHeight;
+  // auto-stop when expected shots reached
+  if(run.drill.shots>0 && run.shots.length>=run.drill.shots){
+    setTimeout(()=>{ if(run&&run.started) stopRun(); }, 250);
+  }
+}
+
+function stopRun(){
+  if(!run) return;
+  if(run.raf) cancelAnimationFrame(run.raf);
+  if(run.parTimer) clearTimeout(run.parTimer);
+  run.started=false;
+  const total = run.shots.length ? run.shots[run.shots.length-1] : (performance.now()-run.beepAt)/1000;
+  run.total=total;
+  stopMic();
+  $("#console").classList.remove("on");
+  showReview();
+}
+function endConsole(){
+  if(run&&run.raf) cancelAnimationFrame(run.raf);
+  if(run&&run.parTimer) clearTimeout(run.parTimer);
+  stopMic();
+  run=null;
+  $("#console").classList.remove("on");
+  $("#setup").classList.remove("hidden");
+}
+
+/* ---------------- REVIEW + SCORE ---------------- */
+let scoreMode="simple";
+function showReview(){
+  $("#review").classList.remove("hidden");
+  const shots=run.shots, total=run.total;
+  $("#rTotal").textContent=fmt(total,2)+"s";
+  $("#rFirst").textContent=shots.length?fmt(shots[0],2)+"s":"—";
+  $("#rShots").textContent=shots.length+(run.drill.shots>0?(" / "+run.drill.shots):"");
+  // splits
+  const sb=$("#splitsBox");
+  if(shots.length>1){
+    sb.style.display="";
+    let html="";
+    for(let i=1;i<shots.length;i++){
+      html+='<div class="shotline"><span class="n">split '+i+'→'+(i+1)+'</span><span class="s">+'+fmt(shots[i]-shots[i-1],2)+'s</span></div>';
+    }
+    sb.innerHTML=html;
+  }else{ sb.style.display="none"; }
+  // reset score inputs sensibly
+  if(run.drill.shots>0){ $("#inHits").value=run.drill.shots; $("#inMiss").value=0; }
+  else { $("#inHits").value=shots.length||0; $("#inMiss").value=0; }
+  $("#inA").value=0;$("#inC").value=0;$("#inD").value=0;$("#inMs").value=0;$("#inNotes").value="";
+  computeScore();
+  $("#review").scrollIntoView({behavior:"smooth"});
+}
+$$("#scoreMode button").forEach(b=>b.onclick=()=>{
+  scoreMode=b.dataset.m;
+  $$("#scoreMode button").forEach(x=>x.classList.toggle("on",x===b));
+  $("#scoreSimple").classList.toggle("hidden",scoreMode!=="simple");
+  $("#scoreIpsc").classList.toggle("hidden",scoreMode!=="ipsc");
+  computeScore();
+});
+["inHits","inMiss","inA","inC","inD","inMs"].forEach(id=>$("#"+id).oninput=computeScore);
+
+function currentScore(){
+  let hits,miss,points;
+  if(scoreMode==="ipsc"){
+    const a=+$("#inA").value||0,c=+$("#inC").value||0,d=+$("#inD").value||0,ms=+$("#inMs").value||0;
+    hits=a+c+d; miss=ms; points=a*5+c*3+d*1-ms*10;
+  }else{
+    hits=+$("#inHits").value||0; miss=+$("#inMiss").value||0; points=hits;
+  }
+  const totalShots=hits+miss;
+  const acc=totalShots>0? hits/totalShots*100 : 0;
+  const hf= run&&run.total>0 ? Math.max(0,points)/run.total : 0;
+  return {hits,miss,points,acc,hf};
+}
+function computeScore(){
+  const s=currentScore();
+  $("#rAcc").textContent=fmt(s.acc,0)+"%";
+  $("#rHF").textContent=fmt(s.hf,2);
+}
+
+$("#btnDiscard").onclick=()=>{ run=null; $("#review").classList.add("hidden"); $("#setup").classList.remove("hidden"); window.scrollTo(0,0); };
+$("#btnSave").onclick=()=>{
+  const sc=currentScore();
+  const sess={
+    id:uid(), date:new Date().toISOString(), drillId:run.drill.id, drillName:run.drill.name,
+    weapon:run.weapon, cal:run.cal, dist:run.dist,
+    total:+run.total.toFixed(3), first:run.shots.length?+run.shots[0].toFixed(3):null,
+    splits:run.shots.slice(1).map((t,i)=>+(t-run.shots[i]).toFixed(3)),
+    nShots:run.shots.length, expShots:run.drill.shots,
+    hits:sc.hits, miss:sc.miss, points:sc.points, acc:+sc.acc.toFixed(1), hf:+sc.hf.toFixed(3),
+    notes:$("#inNotes").value.trim()
+  };
+  DB.sessions.push(sess); save();
+  run=null;
+  $("#review").classList.add("hidden"); $("#setup").classList.remove("hidden"); window.scrollTo(0,0);
+  $$("nav button").forEach(x=>x.classList.toggle("on",x.dataset.v==="hist"));
+  $$(".view").forEach(x=>x.classList.remove("on")); $("#v-hist").classList.add("on");
+  renderHistory();
+  if(MEM_ONLY) alert("Treino salvo (somente nesta sessão). Para salvar de verdade, baixe o arquivo e abra via HTTPS — veja as instruções.");
+};
+
+/* ---------------- DRILLS crud ---------------- */
+function renderDrills(){
+  const list=$("#drillList"); list.innerHTML="";
+  DB.drills.forEach(d=>{
+    const el=document.createElement("div"); el.className="drill";
+    el.innerHTML='<div class="top"><h3>'+esc(d.name)+'</h3></div>'+
+      (d.desc?'<p>'+esc(d.desc)+'</p>':'')+
+      '<div class="meta"><span class="chip">Tiros <b>'+(d.shots>0?d.shots:"livre")+'</b></span>'+
+      '<span class="chip">Dist <b>'+fmt(d.dist,1)+'m</b></span>'+
+      (d.par>0?'<span class="chip">Par <b>'+fmt(d.par,1)+'s</b></span>':'')+'</div>';
+    const top=el.querySelector(".top");
+    const btns=document.createElement("div"); btns.style.display="flex"; btns.style.gap="6px";
+    const edit=document.createElement("button"); edit.className="btn ghost sm"; edit.textContent="Editar"; edit.onclick=()=>openDrillForm(d);
+    btns.appendChild(edit);
+    if(!d.builtin){ const del=document.createElement("button"); del.className="btn danger sm"; del.textContent="✕";
+      del.onclick=()=>{ if(confirm("Apagar drill \""+d.name+"\"?")){ DB.drills=DB.drills.filter(x=>x.id!==d.id); save(); renderDrills(); refreshSetup(); } };
+      btns.appendChild(del); }
+    top.appendChild(btns);
+    list.appendChild(el);
+  });
+}
+function openDrillForm(d){
+  $("#drillForm").classList.remove("hidden");
+  $("#dfId").value=d?d.id:""; $("#dfName").value=d?d.name:""; $("#dfDesc").value=d?d.desc:"";
+  $("#dfShots").value=d?d.shots:3; $("#dfDist").value=d?d.dist:7; $("#dfPar").value=d?d.par:0;
+  $("#dfName").disabled=!!(d&&d.builtin);
+  $("#drillForm").scrollIntoView({behavior:"smooth"});
+}
+$("#btnNewDrill").onclick=()=>openDrillForm(null);
+$("#btnCancelDrill").onclick=()=>$("#drillForm").classList.add("hidden");
+$("#btnSaveDrill").onclick=()=>{
+  const name=$("#dfName").value.trim(); if(!name){ alert("Dê um nome ao drill."); return; }
+  const id=$("#dfId").value;
+  const data={name, desc:$("#dfDesc").value.trim(), shots:+$("#dfShots").value||0, dist:+$("#dfDist").value||0, par:+$("#dfPar").value||0};
+  if(id){ const d=drillById(id); Object.assign(d,data); }
+  else { DB.drills.push(Object.assign({id:uid(),builtin:false},data)); }
+  save(); $("#drillForm").classList.add("hidden"); renderDrills(); refreshSetup();
+};
+
+/* ---------------- HISTORY + CHART ---------------- */
+let metricKey="hf";
+function renderHistory(){
+  const sel=$("#histDrill");
+  const prev=sel.value;
+  sel.innerHTML='<option value="__all">Todos os drills</option>';
+  DB.drills.forEach(d=>{ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name; sel.appendChild(o); });
+  sel.value=prev||"__all";
+  drawChart(); renderSessions(); renderPB();
+}
+$("#histDrill").onchange=()=>{ drawChart(); renderSessions(); renderPB(); };
+$$("#metricMode button").forEach(b=>b.onclick=()=>{ metricKey=b.dataset.k; $$("#metricMode button").forEach(x=>x.classList.toggle("on",x===b)); drawChart(); });
+
+function filteredSessions(){
+  const f=$("#histDrill").value;
+  let arr=DB.sessions.slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(f&&f!=="__all") arr=arr.filter(s=>s.drillId===f);
+  return arr;
+}
+function metricVal(s){ return metricKey==="hf"?s.hf : metricKey==="total"?s.total : (s.first||0); }
+function metricBetterIsHigh(){ return metricKey==="hf"; }
+
+function drawChart(){
+  const cv=$("#chart"); const arr=filteredSessions().filter(s=>metricVal(s)>0);
+  const dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=170;
+  cv.width=W*dpr; cv.height=H*dpr; const g=cv.getContext("2d"); g.scale(dpr,dpr);
+  g.clearRect(0,0,W,H);
+  if(arr.length<1){ g.fillStyle="#6b7484"; g.font="13px ui-monospace"; g.textAlign="center"; g.fillText("Sem dados ainda — registre um treino.",W/2,H/2); return; }
+  const vals=arr.map(metricVal); let mn=Math.min(...vals), mx=Math.max(...vals);
+  if(mn===mx){ mn-=mn*0.1+0.1; mx+=mx*0.1+0.1; } const pad=(mx-mn)*0.15; mn-=pad; mx+=pad;
+  const PL=10,PR=10,PT=14,PB=18, w=W-PL-PR, h=H-PT-PB;
+  const X=i=>arr.length===1?PL+w/2:PL+(i/(arr.length-1))*w;
+  const Y=v=>PT+h-((v-mn)/(mx-mn))*h;
+  // grid
+  g.strokeStyle="#2b3140"; g.lineWidth=1;
+  for(let k=0;k<=3;k++){ const y=PT+(k/3)*h; g.beginPath(); g.moveTo(PL,y); g.lineTo(W-PR,y); g.stroke(); }
+  // area + line
+  g.beginPath(); arr.forEach((s,i)=>{ const x=X(i),y=Y(metricVal(s)); i?g.lineTo(x,y):g.moveTo(x,y); });
+  g.strokeStyle="#e2ab5d"; g.lineWidth=2.4; g.lineJoin="round"; g.stroke();
+  g.lineTo(X(arr.length-1),PT+h); g.lineTo(X(0),PT+h); g.closePath();
+  g.fillStyle="#c790491f"; g.fill();
+  // points + best
+  const best = metricBetterIsHigh()? Math.max(...vals):Math.min(...vals);
+  arr.forEach((s,i)=>{ const x=X(i),y=Y(metricVal(s)); const isBest=metricVal(s)===best;
+    g.beginPath(); g.arc(x,y,isBest?5:3.2,0,7); g.fillStyle=isBest?"#57c98a":"#e2ab5d"; g.fill(); });
+}
+function renderPB(){
+  const arr=filteredSessions(); const box=$("#pbBox"); box.innerHTML="";
+  if(!arr.length) return;
+  const add=(l,v)=>{ const c=document.createElement("span"); c.className="chip"; c.innerHTML=l+" <b>"+v+"</b>"; box.appendChild(c); };
+  const hfs=arr.map(s=>s.hf).filter(v=>v>0);
+  const firsts=arr.map(s=>s.first).filter(v=>v>0);
+  if(hfs.length) add("Melhor HF", fmt(Math.max(...hfs),2));
+  if(firsts.length) add("Melhor 1º tiro", fmt(Math.min(...firsts),2)+"s");
+  add("Sessões", arr.length);
+}
+function renderSessions(){
+  const arr=filteredSessions().slice().reverse();
+  const list=$("#histList"); list.innerHTML="";
+  if(!arr.length){ list.innerHTML='<div class="empty"><div class="big">◎</div>Nenhum treino registrado.<br>Vá em <b>Treinar</b> e dispare o primeiro.</div>'; return; }
+  const bestHF=Math.max(...DB.sessions.filter(s=>($("#histDrill").value==="__all")||s.drillId===$("#histDrill").value).map(s=>s.hf||0));
+  arr.forEach(s=>{
+    const el=document.createElement("div"); el.className="hrow";
+    const dt=new Date(s.date); const dstr=dt.toLocaleDateString("pt-BR")+" "+dt.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+    const pb=(s.hf>0 && s.hf===bestHF)?' <span class="pb">PB</span>':'';
+    el.innerHTML='<div class="hf">'+fmt(s.hf,2)+'</div>'+
+      '<div class="mid"><div class="t1">'+esc(s.drillName)+pb+'</div>'+
+      '<div class="t2">'+dstr+' · '+esc(s.weapon)+' '+esc(s.cal)+' · '+fmt(s.total,2)+'s · '+s.acc+'%</div></div>';
+    el.onclick=()=>showSession(s);
+    list.appendChild(el);
+  });
+}
+function showSession(s){
+  const sp=s.splits&&s.splits.length?("\nSplits: "+s.splits.map(x=>fmt(x,2)).join(" · ")+" s"):"";
+  alert(
+    s.drillName+"\n"+new Date(s.date).toLocaleString("pt-BR")+
+    "\n\nArma: "+s.weapon+" "+s.cal+"  ·  "+fmt(s.dist,1)+"m"+
+    "\nTempo total: "+fmt(s.total,2)+"s"+(s.first!=null?("\n1º tiro: "+fmt(s.first,2)+"s"):"")+
+    "\nTiros: "+s.nShots+(s.expShots>0?(" / "+s.expShots):"")+
+    "\nAcertos: "+s.hits+"  Erros: "+s.miss+"  Precisão: "+s.acc+"%"+
+    "\nPontos: "+s.points+"   Hit factor: "+fmt(s.hf,2)+sp+
+    (s.notes?("\n\nObs: "+s.notes):"")+
+    "\n\n(Apagar esta sessão? confirme a seguir)"
+  );
+  if(confirm("Apagar esta sessão?")){ DB.sessions=DB.sessions.filter(x=>x.id!==s.id); save(); renderHistory(); }
+}
+
+/* ---------------- export / import ---------------- */
+function download(name,content,type){
+  const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$("#btnJSON").onclick=()=>download("cadencia_dados.json",JSON.stringify(DB,null,2),"application/json");
+$("#btnCSV").onclick=()=>{
+  const head=["data","drill","arma","calibre","distancia_m","tempo_total_s","tempo_1o_tiro_s","tiros","tiros_esperados","acertos","erros","pontos","precisao_pct","hit_factor","splits_s","observacoes"];
+  const rows=DB.sessions.map(s=>[
+    new Date(s.date).toLocaleString("pt-BR"), s.drillName, s.weapon, s.cal, s.dist,
+    fmt(s.total,2), s.first!=null?fmt(s.first,2):"", s.nShots, s.expShots, s.hits, s.miss, s.points, s.acc, fmt(s.hf,2),
+    (s.splits||[]).map(x=>fmt(x,2)).join(" "), (s.notes||"").replace(/[\n;]/g," ")
+  ].map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(";"));
+  download("cadencia_treinos.csv","\uFEFF"+head.join(";")+"\n"+rows.join("\n"),"text/csv");
+};
+$("#btnImport").onclick=()=>$("#fileImport").click();
+$("#fileImport").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return; const r=new FileReader();
+  r.onload=()=>{ try{ const j=JSON.parse(r.result);
+      if(Array.isArray(j.sessions)) DB.sessions=j.sessions;
+      if(Array.isArray(j.drills)&&j.drills.length) DB.drills=j.drills;
+      if(j.settings) DB.settings=Object.assign({},DEFAULT_SETTINGS,j.settings);
+      save(); refreshSetup(); renderHistory(); loadSettingsUI(); alert("Dados importados.");
+    }catch(err){ alert("Arquivo inválido."); } };
+  r.readAsText(f); e.target.value="";
+};
+
+/* ---------------- settings UI ---------------- */
+function loadSettingsUI(){
+  const s=DB.settings;
+  $("#cfgDlyMin").value=s.dlyMin; $("#cfgDlyMax").value=s.dlyMax;
+  $("#cfgSound").checked=s.sound; $("#cfgVibrate").checked=s.vibrate;
+  $("#cfgFlash").checked=s.flash; $("#cfgParBeep").checked=s.parBeep;
+}
+function bindCfg(id,key,isNum){ $("#"+id)["on"+(isNum?"input":"change")]=e=>{ DB.settings[key]=isNum?(+e.target.value):e.target.checked; save(); refreshSetup(); }; }
+bindCfg("cfgDlyMin","dlyMin",true); bindCfg("cfgDlyMax","dlyMax",true);
+bindCfg("cfgSound","sound",false); bindCfg("cfgVibrate","vibrate",false);
+bindCfg("cfgFlash","flash",false); bindCfg("cfgParBeep","parBeep",false);
+$("#btnWipe").onclick=()=>{ if(confirm("Apagar TODOS os treinos e drills personalizados?")){ DB={drills:JSON.parse(JSON.stringify(DEFAULT_DRILLS)),sessions:[],settings:Object.assign({},DEFAULT_SETTINGS)}; save(); refreshSetup(); renderHistory(); renderDrills(); loadSettingsUI(); } };
+
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ---------------- init ---------------- */
+refreshSetup(); loadSettingsUI();
+// secure-context hint
+if(!window.isSecureContext){
+  $("#micBanner").classList.add("on");
+  $("#micBanner").innerHTML="⚠ Você abriu o app sem HTTPS. O <b>microfone não vai funcionar</b> aqui — use o modo por tempo, ou hospede o arquivo (instruções no chat) para liberar a detecção de tiros.";
+}
+</script>
+</body>
+</html>

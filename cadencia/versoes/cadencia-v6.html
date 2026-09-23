@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  CADÊNCIA — Treino de Tiro (HTML único, vanilla JS, dados em localStorage).
+  VERSÃO: v5 — refinamentos locais (A–F) + MÓDULO ONLINE (multiplayer Firebase).
+  v5 local: avanço Automático no Modo Bloco (com sessões "não pontuadas" que saem
+  das médias de HF/precisão), editar categoria de qualquer drill (protegida por
+  userTag), preview sonoro do beep, filtro de categoria no Treinar, campo "Alvo
+  recomendado" nos drills e 2 drills de pane induzível (Tipo 3 e Bola e Manequim).
+  v5 online: desafios entre celulares por código, ranking em tempo real (Firestore
+  onSnapshot), login anônimo, presença ao vivo e fila offline (offline-first). Só
+  resultados de desafio online sobem; o resto é 100% local e funciona sem rede.
+  A config do Firebase está num bloco marcado no script (pública por design; a
+  segurança é feita pelas REGRAS do Firestore, entregues à parte).
+  (v4 — "Modo Bloco + biblioteca + sinais").
+  Base: v3 (detecção adaptativa de transiente, requireClip, piso de ruído) — mantida.
+  MUDANÇAS DA v4 (Especificação v4, itens A–D):
+    A) Modo Bloco: campo "Repetições" (1–50); roda N repetições do mesmo drill em
+       sequência (drill/arma/calibre/distância travados), cada uma salva como sessão
+       individual carimbada com blockId/repIndex/blockSize; tela "Preparar próxima"
+       (avanço manual) e Relatório do Bloco (tabela por rep + agregados, incluindo
+       Consistência = desvio-padrão populacional do tempo + gráfico com alternador
+       de métrica). N=1 é idêntico à v3.
+    B) Biblioteca de drills: migração de tags (conserta a categorização das abas),
+       3 drills novos de fábrica e seletor de Categoria ao criar/editar.
+    C) Correção do bug de salvar pós-desafio (a revisão ativa a aba Treinar sozinha).
+    D) Beep mais alto (dois osciladores + setting beepVol) e flash mais claro
+       (mais longo, com opção de piscar duas vezes).
+  Chave de dados inalterada (KEY="cadencia_v1"); nenhuma migração apaga dados.
+  ============================================================================
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#16191f">
+<title>CADÊNCIA — Treino de Tiro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#16191f; --bg2:#1d212a; --surface:#232834; --raise:#2b3140;
+    --line:#333a48; --line2:#3f4757;
+    --ink:#e9edf2; --dim:#9aa3b2; --faint:#6b7484;
+    --brass:#c79049; --brass-hi:#e2ab5d; --brass-dim:#8a6531;
+    --signal:#ff4d3d; --signal-dim:#7a261f;
+    --good:#57c98a; --warn:#e7b15a; --gold:#f2c14e; --silver:#c2c8d2; --bronze:#cd8b54;
+    --display:'Oswald',ui-sans-serif,system-ui,sans-serif;
+    --body:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg); color:var(--ink); font-family:var(--body); -webkit-font-smoothing:antialiased; line-height:1.45; min-height:100dvh;}
+  .wrap{max-width:760px; margin:0 auto; padding:0 16px 110px;}
+  header{position:sticky; top:0; z-index:40; background:linear-gradient(180deg,#13161c,#13161cf2 70%,#13161c00); backdrop-filter:blur(6px); padding:16px 16px 12px; border-bottom:1px solid var(--line);}
+  .brand{display:flex; align-items:center; gap:12px; max-width:760px; margin:0 auto; justify-content:space-between}
+  .brand .l{display:flex; align-items:baseline; gap:10px}
+  .brand h1{font-family:var(--display); font-weight:700; letter-spacing:.22em; font-size:23px; margin:0; text-transform:uppercase;}
+  .brand h1 .x{color:var(--brass)}
+  .profile{display:flex; align-items:center; gap:6px}
+  .profile select{background:var(--surface); border:1px solid var(--line2); color:var(--brass-hi); border-radius:8px; padding:6px 8px; font-size:13px; font-family:var(--mono); max-width:120px}
+  .profile button{background:none; border:1px solid var(--line2); color:var(--dim); border-radius:8px; width:32px; height:32px; cursor:pointer; font-size:16px}
+
+  nav{position:fixed; left:0; right:0; bottom:0; z-index:50; background:#12151b; border-top:1px solid var(--line); display:flex; justify-content:center; gap:0; padding:7px 4px calc(7px + env(safe-area-inset-bottom));}
+  nav button{flex:1; max-width:150px; background:none; border:0; color:var(--faint); font-family:var(--display); text-transform:uppercase; letter-spacing:.1em; font-size:11px; font-weight:600; padding:7px 2px 5px; cursor:pointer; border-radius:9px; display:flex; flex-direction:column; align-items:center; gap:4px; transition:color .15s;}
+  nav button .ic{font-size:17px; line-height:1}
+  nav button.on{color:var(--brass)}
+
+  .view{display:none; animation:fade .25s ease}
+  .view.on{display:block}
+  @keyframes fade{from{opacity:0; transform:translateY(6px)} to{opacity:1}}
+  h2.sec{font-family:var(--display); text-transform:uppercase; letter-spacing:.16em; font-size:14px; color:var(--dim); font-weight:600; margin:24px 2px 12px; display:flex; align-items:center; gap:10px}
+  h2.sec::after{content:""; flex:1; height:1px; background:var(--line)}
+  .card{background:var(--bg2); border:1px solid var(--line); border-radius:14px; padding:16px;}
+  label.fld{display:block; margin:0 0 13px}
+  label.fld > span{display:block; font-size:11px; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); font-family:var(--mono); margin-bottom:6px}
+  select,input[type=text],input[type=number],textarea{width:100%; background:var(--surface); border:1px solid var(--line2); color:var(--ink); border-radius:10px; padding:11px 12px; font-size:15px; font-family:var(--body); outline:none;}
+  select:focus,input:focus,textarea:focus{border-color:var(--brass); box-shadow:0 0 0 3px #c790491f}
+  .row{display:flex; gap:12px} .row>*{flex:1}
+  .seg{display:flex; background:var(--surface); border:1px solid var(--line2); border-radius:10px; overflow:hidden}
+  .seg button{flex:1; background:none; border:0; color:var(--dim); padding:10px 6px; font-size:13px; cursor:pointer; font-family:var(--body); font-weight:600; transition:.12s}
+  .seg button.on{background:var(--brass); color:#1a1205}
+  .seg button + button{border-left:1px solid var(--line2)}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:9px; width:100%; background:var(--brass); color:#1a1205; border:0; border-radius:12px; padding:16px; font-family:var(--display); text-transform:uppercase; letter-spacing:.14em; font-weight:700; font-size:16px; cursor:pointer; transition:.12s}
+  .btn:hover{background:var(--brass-hi)} .btn:active{transform:translateY(1px)}
+  .btn.ghost{background:none; border:1px solid var(--line2); color:var(--ink)}
+  .btn.ghost:hover{border-color:var(--brass); color:var(--brass-hi)}
+  .btn.danger{background:none; border:1px solid var(--signal-dim); color:var(--signal)}
+  .btn.sm{padding:10px 14px; font-size:13px; width:auto}
+  .chip{display:inline-flex; gap:7px; align-items:center; font-family:var(--mono); font-size:12px; color:var(--dim); background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:5px 11px}
+  .chip b{color:var(--brass-hi); font-weight:600}
+  .tag{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding:2px 7px; border-radius:5px; border:1px solid var(--line2); color:var(--dim)}
+  .summary{display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 4px}
+
+  .console{position:fixed; inset:0; z-index:80; background:radial-gradient(120% 80% at 50% 0%, #1c2129, #0e1014); display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px;}
+  .console.on{display:flex}
+  /* v4 (item D): flash mais claro/longo — sustenta o branco até ~50% e esmaece.
+     flash2 = dois pulsos rápidos (setting flashDouble). */
+  .console.flash{animation:flash .30s ease}
+  .console.flash2{animation:flash2 .5s ease}
+  @keyframes flash{0%{background:#fff}50%{background:#fff}100%{background:#0e1014}}
+  @keyframes flash2{0%{background:#fff}22%{background:#0e1014}40%{background:#fff}64%{background:#0e1014}100%{background:#0e1014}}
+  .state{font-family:var(--display); text-transform:uppercase; letter-spacing:.3em; font-size:19px; color:var(--dim); min-height:24px; margin-bottom:8px}
+  .state.live{color:var(--signal)}
+  .clock{font-family:var(--mono); font-weight:800; font-variant-numeric:tabular-nums; font-size:clamp(58px,22vw,128px); line-height:.95; letter-spacing:-.02em; color:var(--brass-hi); text-shadow:0 0 24px #c7904933}
+  .clock.live{color:var(--signal); text-shadow:0 0 30px #ff4d3d44}
+  .clock .u{font-size:.32em; color:var(--faint); letter-spacing:.05em; margin-left:6px}
+  .shotsfeed{margin:18px 0 4px; width:100%; max-width:340px; max-height:34vh; overflow:auto; font-family:var(--mono);}
+  .shotline{display:flex; justify-content:space-between; font-size:15px; padding:7px 12px; border-bottom:1px solid #ffffff0d; animation:slidein .2s ease}
+  @keyframes slidein{from{opacity:0; transform:translateX(-8px)} to{opacity:1}}
+  .shotline .n{color:var(--faint)} .shotline .t{color:var(--ink)} .shotline .s{color:var(--brass-hi)}
+  .console .controls{position:fixed; left:0; right:0; bottom:0; padding:18px 24px calc(20px + env(safe-area-inset-bottom)); display:flex; gap:12px; max-width:520px; margin:0 auto}
+  .lvl{position:relative; width:100%; max-width:380px; height:14px; background:#ffffff10; border-radius:9px; overflow:hidden; margin:6px 0}
+  .lvl > i{display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--good),var(--warn),var(--signal)); transition:width .03s}
+  .lvl .mark{position:absolute; top:-5px; bottom:-5px; width:3px; background:var(--ink); border-radius:2px}
+
+  .stat{display:flex; flex-direction:column; gap:3px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:13px 14px}
+  .stat .k{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); font-family:var(--mono)}
+  .stat .v{font-family:var(--mono); font-weight:800; font-size:22px; color:var(--ink); font-variant-numeric:tabular-nums}
+  .stat .v.brass{color:var(--brass-hi)} .stat .v.sig{color:var(--signal)} .stat .v.good{color:var(--good)}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
+
+  .drill{background:var(--bg2); border:1px solid var(--line); border-radius:13px; padding:14px 15px; margin-bottom:10px}
+  .drill .top{display:flex; justify-content:space-between; align-items:start; gap:10px}
+  .drill h3{font-family:var(--display); text-transform:uppercase; letter-spacing:.06em; font-size:16px; margin:0; font-weight:600}
+  .drill p{margin:7px 0 10px; color:var(--dim); font-size:13.5px}
+  .drill .meta{display:flex; flex-wrap:wrap; gap:7px; align-items:center}
+
+  .hrow{display:flex; align-items:center; gap:12px; padding:12px 4px; border-bottom:1px solid var(--line); cursor:pointer}
+  .hrow:hover{background:#ffffff05}
+  .hrow .hf{font-family:var(--mono); font-weight:800; font-size:18px; color:var(--brass-hi); min-width:58px; text-align:right}
+  .hrow .mid{flex:1; min-width:0}
+  .hrow .mid .t1{font-family:var(--display); text-transform:uppercase; letter-spacing:.05em; font-size:14px}
+  .hrow .mid .t2{font-size:11px; color:var(--faint); font-family:var(--mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .pb{color:var(--good); font-size:10px; font-family:var(--mono); letter-spacing:.1em; border:1px solid var(--good); border-radius:5px; padding:1px 5px}
+  canvas{width:100%; display:block}
+  .empty{text-align:center; color:var(--faint); padding:36px 20px; font-size:14px}
+  .empty .big{font-size:30px; opacity:.5; margin-bottom:10px}
+  .toggle{display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line)}
+  .toggle:last-child{border-bottom:0} .toggle span{font-size:14px}
+  .sw{position:relative; width:46px; height:26px; flex:none}
+  .sw input{opacity:0; width:0; height:0}
+  .sw .tr{position:absolute; inset:0; background:var(--surface); border:1px solid var(--line2); border-radius:99px; transition:.18s}
+  .sw .tr::before{content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; background:var(--dim); border-radius:50%; transition:.18s}
+  .sw input:checked + .tr{background:var(--brass-dim); border-color:var(--brass)}
+  .sw input:checked + .tr::before{transform:translateX(20px); background:var(--brass-hi)}
+  .note{font-size:12.5px; color:var(--faint); line-height:1.55; margin:10px 2px 0}
+  .banner{background:#2a1c10; border:1px solid var(--brass-dim); color:var(--brass-hi); border-radius:11px; padding:11px 13px; font-size:12.5px; margin:12px 0; display:none}
+  .banner.on{display:block}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:6px; background:var(--surface); border-radius:9px; outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:var(--brass); border:2px solid #1a1205; cursor:pointer}
+  .hidden{display:none!important}
+  .rank{display:flex; align-items:center; gap:12px; padding:12px 6px; border-bottom:1px solid var(--line)}
+  .rank .pos{font-family:var(--display); font-weight:700; font-size:20px; width:34px; text-align:center; color:var(--faint)}
+  .rank .pos.g1{color:var(--gold)} .rank .pos.g2{color:var(--silver)} .rank .pos.g3{color:var(--bronze)}
+  .rank .who{flex:1} .rank .who .n{font-weight:600; font-size:15px}
+  .rank .who .d{font-size:11px; color:var(--faint); font-family:var(--mono)}
+  .rank .sc{font-family:var(--mono); font-weight:800; font-size:18px; color:var(--brass-hi)}
+  .calib{position:fixed; inset:0; z-index:85; background:#0e1014; display:none; flex-direction:column; padding:24px; overflow:auto}
+  .calib.on{display:flex}
+  @media (max-width:420px){ .brand h1{font-size:20px} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="l"><h1>CADÊN<span class="x">CIA</span></h1></div>
+    <div class="profile">
+      <span style="font-size:11px;color:var(--faint);font-family:var(--mono)">⌖</span>
+      <select id="profileSel" title="Atirador"></select>
+      <button id="btnNewProfile" title="Novo atirador">+</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ===== TREINAR ===== -->
+  <section class="view on" id="v-run">
+    <div id="setup">
+      <h2 class="sec">Preparar treino</h2>
+      <div class="card">
+        <div class="seg" id="runDrillFilter" style="margin-bottom:12px"><button data-t="all" class="on">Todos</button><button data-t="recarga">Recarga</button><button data-t="velocidade">Veloc.</button><button data-t="precisão">Precisão</button></div>
+        <label class="fld"><span>Drill</span><select id="selDrill"></select></label>
+        <div class="summary" id="drillSummary"></div>
+        <div class="row" style="margin-top:6px">
+          <label class="fld"><span>Arma</span><select id="selWeapon"><option>Pistola</option><option>Revólver</option><option>Carabina</option><option>Espingarda</option></select></label>
+          <label class="fld"><span>Calibre</span><input id="inCal" list="cals" placeholder="ex: 9mm" value="9mm">
+            <datalist id="cals"><option>.22 LR</option><option>.380 ACP</option><option>9mm</option><option>.38 SPL</option><option>.357 Mag</option><option>.40 S&amp;W</option><option>.45 ACP</option><option>.223 / 5.56</option><option>.308</option><option>12</option></datalist></label>
+        </div>
+        <div class="row">
+          <label class="fld"><span>Distância (metros)</span><input id="inDist" type="number" inputmode="decimal" value="7" step="0.5" min="0"></label>
+          <label class="fld"><span>Repetições (bloco)</span><input id="inReps" type="number" inputmode="numeric" value="1" min="1" max="50" step="1"></label>
+        </div>
+        <h2 class="sec" style="margin-top:8px">Cronômetro</h2>
+        <div class="toggle"><span>Detectar tiros pelo microfone</span><label class="sw"><input type="checkbox" id="tgMic" checked><span class="tr"></span></label></div>
+        <button class="btn ghost sm" id="btnCalibOpen" style="width:100%; margin-top:14px">🎚 Ajustar captação do microfone</button>
+        <div class="banner" id="micBanner"></div>
+      </div>
+      <button class="btn" id="btnStart" style="margin-top:16px">▶ Iniciar (Standby)</button>
+      <p class="note">Largada com atraso aleatório entre <b id="dlyTxt">1,5 e 4,0 s</b>. Ao apito: tela pisca, celular vibra e toca o beep.</p>
+    </div>
+
+    <div id="review" class="hidden">
+      <h2 class="sec">Resultado <span id="reviewRepTag" style="font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--brass-hi);text-transform:none"></span></h2>
+      <div class="grid3">
+        <div class="stat"><span class="k">Tempo total</span><span class="v brass" id="rTotal">—</span></div>
+        <div class="stat"><span class="k">1º tiro</span><span class="v" id="rFirst">—</span></div>
+        <div class="stat"><span class="k">Tiros</span><span class="v" id="rShots">—</span></div>
+      </div>
+      <div id="splitsBox" class="card" style="margin-top:10px; padding:6px 14px"></div>
+      <h2 class="sec">Pontuação</h2>
+      <div class="card">
+        <div class="seg" id="scoreMode" style="margin-bottom:14px"><button data-m="simple" class="on">Acertos / Erros</button><button data-m="ipsc">Zonas IPSC</button></div>
+        <div id="scoreSimple"><div class="row">
+          <label class="fld"><span>Acertos no alvo</span><input type="number" id="inHits" inputmode="numeric" value="0" min="0"></label>
+          <label class="fld"><span>Fora / erros</span><input type="number" id="inMiss" inputmode="numeric" value="0" min="0"></label></div></div>
+        <div id="scoreIpsc" class="hidden">
+          <div class="row"><label class="fld"><span>Zona A (+5)</span><input type="number" id="inA" inputmode="numeric" value="0" min="0"></label><label class="fld"><span>Zona C (+3)</span><input type="number" id="inC" inputmode="numeric" value="0" min="0"></label></div>
+          <div class="row"><label class="fld"><span>Zona D (+1)</span><input type="number" id="inD" inputmode="numeric" value="0" min="0"></label><label class="fld"><span>Miss (−10)</span><input type="number" id="inMs" inputmode="numeric" value="0" min="0"></label></div>
+        </div>
+        <div class="grid3" style="margin-top:4px">
+          <div class="stat"><span class="k">Precisão</span><span class="v good" id="rAcc">—</span></div>
+          <div class="stat"><span class="k">Hit factor</span><span class="v sig" id="rHF">—</span></div>
+          <div class="stat" id="rCorrWrap" style="display:none"><span class="k">Tempo corrigido</span><span class="v" id="rCorr">—</span></div>
+        </div>
+        <p class="note">Hit factor = pontos ÷ tempo. Junta <b>velocidade e acerto</b>.</p>
+        <label class="fld" style="margin-top:14px"><span>Observações</span><textarea id="inNotes" rows="2" placeholder="postura, munição, condição…"></textarea></label>
+      </div>
+      <div class="row" style="margin-top:16px"><button class="btn ghost" id="btnDiscard">Descartar</button><button class="btn" id="btnSave">Salvar treino</button></div>
+    </div>
+
+    <!-- A7: preparar próxima repetição do bloco -->
+    <div id="blockNext" class="hidden">
+      <h2 class="sec">Bloco — próxima repetição</h2>
+      <div class="card">
+        <div class="summary" id="blockNextInfo"></div>
+        <div id="blockNextTitle" style="text-align:center;font-family:var(--display);text-transform:uppercase;letter-spacing:.16em;color:var(--brass-hi);font-size:18px;margin:14px 0 2px">Repetição</div>
+      </div>
+      <button class="btn" id="btnNextRep" style="margin-top:16px">▶ Iniciar repetição</button>
+      <button class="btn ghost sm" id="btnEndBlock" style="margin-top:10px">Encerrar bloco</button>
+    </div>
+
+    <!-- A3 (v5): descanso do modo Automático -->
+    <div id="blockRest" class="hidden">
+      <h2 class="sec">Bloco — descanso</h2>
+      <div class="card" style="text-align:center">
+        <div id="blockRestTitle" style="font-family:var(--display);text-transform:uppercase;letter-spacing:.16em;color:var(--brass-hi);font-size:18px;margin:4px 0 2px">Repetição concluída</div>
+        <div id="blockRestCount" style="font-family:var(--mono);font-weight:800;font-size:64px;color:var(--ink);margin:8px 0">5</div>
+        <div class="note" style="margin:0">Próxima repetição começa sozinha…</div>
+        <button class="btn ghost sm" id="btnStopBlock" style="width:100%;margin-top:14px">Parar bloco</button>
+      </div>
+    </div>
+
+    <!-- A8: relatório consolidado do bloco -->
+    <div id="blockReport" class="hidden">
+      <h2 class="sec">Relatório do bloco</h2>
+      <div class="summary" id="blockRepInfo"></div>
+      <div class="grid2" id="blockRepCards" style="margin-top:6px"></div>
+      <div class="card" style="margin-top:12px">
+        <div class="seg" id="blockMetric" style="margin-bottom:12px"><button data-k="total" class="on">Tempo total</button><button data-k="hf">Hit factor</button><button data-k="first">1º tiro</button></div>
+        <canvas id="blockChart" height="150"></canvas>
+        <div class="note" id="blockChartCap" style="text-align:center"></div>
+      </div>
+      <h2 class="sec">Por repetição</h2>
+      <div id="blockTable"></div>
+      <button class="btn" id="btnBlockDone" style="margin-top:16px">Concluir</button>
+    </div>
+  </section>
+
+  <!-- ===== DRILLS ===== -->
+  <section class="view" id="v-drills">
+    <h2 class="sec">Biblioteca de drills</h2>
+    <div class="seg" id="drillFilter" style="margin-bottom:14px"><button data-t="all" class="on">Todos</button><button data-t="recarga">Recarga</button><button data-t="velocidade">Veloc.</button><button data-t="precisão">Precisão</button></div>
+    <div id="drillList"></div>
+    <button class="btn ghost" id="btnNewDrill" style="margin-top:6px">+ Criar drill</button>
+    <div id="drillForm" class="card hidden" style="margin-top:16px">
+      <input type="hidden" id="dfId">
+      <label class="fld"><span>Nome</span><input type="text" id="dfName" placeholder="ex: Saque rápido"></label>
+      <label class="fld"><span>Descrição</span><textarea id="dfDesc" rows="2"></textarea></label>
+      <label class="fld"><span>Categoria</span><select id="dfTag"><option value="velocidade">Velocidade</option><option value="precisão">Precisão</option><option value="recarga">Recarga</option><option value="livre">Livre</option></select></label>
+      <label class="fld"><span>Alvo recomendado</span><input type="text" id="dfTarget" list="targetSugg" placeholder="ex: Silhueta IPSC (A/C/D)">
+        <datalist id="targetSugg"><option>Silhueta IPSC (A/C/D)</option><option>Silhueta IDPA</option><option>Bullseye / B8</option><option>Alvo de pontos 3"</option><option>Aço (popper/plate)</option><option>Silhueta policial (B27)</option><option>Cartão 3x5" + círculo 8"</option></datalist></label>
+      <div class="row"><label class="fld"><span>Tiros (0=livre)</span><input type="number" id="dfShots" value="3" min="0"></label><label class="fld"><span>Distância (m)</span><input type="number" id="dfDist" value="7" step="0.5"></label></div>
+      <div class="row"><label class="fld"><span>Par time (s, 0=sem)</span><input type="number" id="dfPar" value="0" step="0.1" min="0"></label><label class="fld"><span>Penal./erro (s)</span><input type="number" id="dfPen" value="0" step="0.5" min="0"></label></div>
+      <div class="row"><button class="btn ghost sm" id="btnCancelDrill">Cancelar</button><button class="btn sm" id="btnSaveDrill">Salvar drill</button></div>
+    </div>
+  </section>
+
+  <!-- ===== DESAFIOS ===== -->
+  <section class="view" id="v-chal">
+    <h2 class="sec">Desafios &amp; ranking</h2>
+    <p class="note" style="margin:0 2px 12px">Desafios <b>Locais</b> (vários atiradores no mesmo aparelho, revezando) e <b>Online</b> (entre celulares diferentes, por código, ranking em tempo real). O online usa login anônimo e só sobe resultados de desafio — seu treino pessoal fica no aparelho.</p>
+    <div id="chalList"></div>
+    <div class="row" style="margin-top:6px"><button class="btn ghost sm" id="btnNewChal">+ Criar desafio</button><button class="btn ghost sm" id="btnJoinCode">Entrar com código</button></div>
+    <div id="chalForm" class="card hidden" style="margin-top:16px">
+      <div style="margin:0 0 12px"><span style="display:block;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);font-family:var(--mono);margin-bottom:6px">Tipo</span><div class="seg" id="cfMode"><button data-m="local" class="on">Local</button><button data-m="online">Online</button></div></div>
+      <label class="fld"><span>Nome do desafio</span><input type="text" id="cfName" placeholder="ex: Mozambique da galera"></label>
+      <label class="fld"><span>Drill</span><select id="cfDrill"></select></label>
+      <div class="row"><label class="fld"><span>Distância (m)</span><input type="number" id="cfDist" value="7" step="0.5"></label>
+      <label class="fld"><span>Ranquear por</span><select id="cfMetric"><option value="hf">Hit factor</option><option value="total">Tempo total</option><option value="first">1º tiro</option></select></label></div>
+      <div class="row"><button class="btn ghost sm" id="btnCancelChal">Cancelar</button><button class="btn sm" id="btnSaveChal">Criar</button></div>
+    </div>
+    <div id="chalDetail" class="hidden">
+      <h2 class="sec" id="chalDetailTitle">Ranking</h2>
+      <div class="summary" id="chalInfo"></div>
+      <div id="chalOnlineBox" class="card hidden" style="margin:8px 0;padding:11px 13px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-family:var(--mono)">Código do desafio</div><div id="chalCode" style="font-family:var(--mono);font-weight:800;font-size:22px;color:var(--brass-hi);letter-spacing:.12em"></div></div>
+          <button class="btn ghost sm" id="btnCopyCode">Copiar</button>
+        </div>
+        <div class="note" id="chalPresence" style="margin:8px 0 0"></div>
+        <div class="note" id="chalOffline" style="margin:6px 0 0;color:var(--warn);display:none">Offline — mostrando o último ranking salvo.</div>
+      </div>
+      <button class="btn" id="btnEnterChal" style="margin:8px 0 6px">▶ Entrar no desafio</button>
+      <div id="rankList"></div>
+      <button class="btn ghost sm" id="btnBackChal" style="margin-top:14px">← Voltar</button>
+    </div>
+  </section>
+
+  <!-- ===== PAINEL ===== -->
+  <section class="view" id="v-dash">
+    <h2 class="sec">Painel</h2>
+    <div class="card">
+      <div class="row">
+        <label class="fld" style="margin:0"><span>Drill</span><select id="dashDrill"></select></label>
+        <label class="fld" style="margin:0"><span>Atirador</span><select id="dashProfile"></select></label>
+      </div>
+      <div class="grid3" style="margin-top:14px">
+        <div class="stat"><span class="k">Melhor HF</span><span class="v brass" id="dHF">—</span></div>
+        <div class="stat"><span class="k">HF médio</span><span class="v" id="dHFavg">—</span></div>
+        <div class="stat"><span class="k">Sessões</span><span class="v" id="dN">—</span></div>
+        <div class="stat"><span class="k">Melhor 1º tiro</span><span class="v good" id="dFirst">—</span></div>
+        <div class="stat"><span class="k">Melhor tempo</span><span class="v good" id="dTotal">—</span></div>
+        <div class="stat"><span class="k">Precisão méd.</span><span class="v" id="dAcc">—</span></div>
+      </div>
+      <div class="seg" id="metricMode" style="margin-top:14px"><button data-k="hf" class="on">Hit factor</button><button data-k="total">Tempo total</button><button data-k="first">1º tiro</button></div>
+      <canvas id="chart" height="170" style="margin-top:14px"></canvas>
+      <div class="note" id="chartCap" style="text-align:center"></div>
+      <h2 class="sec" style="font-size:12px">Cadência média (splits)</h2>
+      <canvas id="splitChart" height="120"></canvas>
+      <div class="note" style="text-align:center">Tempo médio entre tiros por posição — barras menores e parelhas = ritmo melhor e mais consistente.</div>
+    </div>
+    <h2 class="sec">Sessões</h2>
+    <div class="row" style="margin-bottom:8px"><button class="btn ghost sm" id="btnCSV">Exportar CSV</button><button class="btn ghost sm" id="btnJSON">Exportar JSON</button><button class="btn ghost sm" id="btnImport">Importar</button></div>
+    <input type="file" id="fileImport" accept="application/json" class="hidden">
+    <div id="histList"></div>
+  </section>
+
+  <!-- ===== CONFIG ===== -->
+  <section class="view" id="v-cfg">
+    <h2 class="sec">Largada</h2>
+    <div class="card">
+      <div class="row"><label class="fld"><span>Atraso mín (s)</span><input type="number" id="cfgDlyMin" value="1.5" step="0.1" min="0"></label><label class="fld"><span>Atraso máx (s)</span><input type="number" id="cfgDlyMax" value="4" step="0.1" min="0"></label></div>
+      <div class="toggle"><span>Som (beep)</span><label class="sw"><input type="checkbox" id="cfgSound" checked><span class="tr"></span></label></div>
+      <div style="margin:12px 0 0"><span style="display:block;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);font-family:var(--mono);margin-bottom:6px">Volume do beep</span><div class="seg" id="beepVolSeg"><button data-bv="baixo">Baixo</button><button data-bv="medio">Médio</button><button data-bv="alto" class="on">Alto</button></div></div>
+      <div class="toggle"><span>Vibração</span><label class="sw"><input type="checkbox" id="cfgVibrate" checked><span class="tr"></span></label></div>
+      <div class="toggle"><span>Piscar a tela</span><label class="sw"><input type="checkbox" id="cfgFlash" checked><span class="tr"></span></label></div>
+      <div class="toggle"><span>Piscar duas vezes</span><label class="sw"><input type="checkbox" id="cfgFlashDouble"><span class="tr"></span></label></div>
+      <div class="toggle"><span>Beep no fim do par time</span><label class="sw"><input type="checkbox" id="cfgParBeep" checked><span class="tr"></span></label></div>
+      <div class="toggle"><span>Manter a tela ligada no treino</span><label class="sw"><input type="checkbox" id="cfgWake" checked><span class="tr"></span></label></div>
+      <div style="margin:12px 0 0"><span style="display:block;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);font-family:var(--mono);margin-bottom:6px">Avanço entre repetições (bloco)</span><div class="seg" id="blockAdvSeg"><button data-ba="manual" class="on">Manual</button><button data-ba="auto">Automático</button></div></div>
+      <label class="fld" style="margin:12px 0 0"><span>Descanso entre reps (s) — só no automático</span><input type="number" id="cfgBlockRest" value="5" min="0" max="60" step="1"></label>
+    </div>
+    <h2 class="sec">Microfone</h2>
+    <div class="card">
+      <button class="btn ghost sm" id="btnCalibOpen2" style="width:100%">🎚 Abrir ajuste de captação</button>
+      <p class="note" style="margin-top:10px">Na tela de ajuste você escolhe o dispositivo de áudio, vê a captação ao vivo, o <b>piso de ruído aprendido</b> e regula a margem de detecção. O app aprende o ruído do ambiente sozinho (inclusive nos segundos antes do beep) e ainda mostra se o seu aparelho ignorou o pedido de desligar o ganho automático.</p>
+    </div>
+    <h2 class="sec">Dados</h2>
+    <div class="card">
+      <p class="note" style="margin-top:0">Tudo fica neste navegador, atrelado ao domínio. Atualizar o app não apaga nada. Use <b>Exportar JSON</b> como backup e <b>CSV</b> como base de planilha.</p>
+      <button class="btn danger sm" id="btnWipe" style="margin-top:10px; width:100%">Apagar todos os dados</button>
+    </div>
+    <p class="note">CADÊNCIA v5 — refinamentos do bloco/biblioteca + módulo online (Firebase). Microfone exige HTTPS (não funciona com duplo-clique no arquivo).</p>
+  </section>
+</div>
+
+<!-- RUN CONSOLE -->
+<div class="console" id="console">
+  <div class="state" id="conState">STANDBY</div>
+  <div class="clock" id="conClock">0.00<span class="u">s</span></div>
+  <div class="lvl" id="conLvl" style="display:none"><i id="conLvlFill"></i></div>
+  <div class="shotsfeed" id="feed"></div>
+  <div class="controls"><button class="btn danger" id="btnStop" style="display:none">■ Parar</button><button class="btn ghost" id="btnAbort">Cancelar</button></div>
+</div>
+
+<!-- CALIBRATION -->
+<div class="calib" id="calib">
+  <h2 class="sec" style="margin-top:8px">Ajuste de captação</h2>
+  <p class="note" style="margin-top:0">Bata uma palma forte (ou faça um disparo a seco). A <b>linha branca</b> é o gatilho — ele acompanha sozinho o <b>piso de ruído</b> (linha cinza). Ajuste a margem só pra deixar seus disparos cruzando a branca e o fundo/vizinhos abaixo.</p>
+  <label class="fld" style="margin-top:14px"><span>Dispositivo de áudio</span><select id="audioDev"></select></label>
+  <div class="banner note" id="micProc" style="margin-top:6px"></div>
+  <div class="card" style="margin-top:6px">
+    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-family:var(--mono);margin-bottom:8px">Captação ao vivo</div>
+    <div class="lvl" id="calibLvl"><i id="calibFill"></i><span class="mark" id="calibFloor" style="background:var(--faint);opacity:.8"></span><span class="mark" id="calibMark"></span></div>
+    <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:4px"><span>silêncio</span><span>tiro alto</span></div>
+    <div style="display:flex;gap:14px;font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:6px"><span>▮ branca = gatilho</span><span style="color:var(--faint)">▮ cinza = piso de ruído</span></div>
+    <label class="fld" style="margin:18px 0 0"><span>Margem de detecção — <b id="calSensVal" style="color:var(--brass-hi)">17 dB</b> &nbsp;acima do ruído (maior = ignora mais som ao redor)</span><input type="range" id="calSens" min="1" max="99" value="55"></label>
+    <div class="grid2" style="margin-top:8px">
+      <div class="stat"><span class="k">Nível atual</span><span class="v" id="calPeak">0%</span></div>
+      <div class="stat"><span class="k">Piso de ruído</span><span class="v" id="calFloorV">0%</span></div>
+      <div class="stat"><span class="k">Clip (no teto)</span><span class="v" id="calClipV">0%</span></div>
+      <div class="stat"><span class="k">Tiros no teste</span><span class="v brass" id="calCount">0</span></div>
+    </div>
+    <div class="toggle" style="margin-top:6px"><span>Exigir impacto forte (clip) — rejeita sons mais fracos</span><label class="sw"><input type="checkbox" id="calClip"><span class="tr"></span></label></div>
+    <button class="btn ghost sm" id="calReset" style="width:100%;margin-top:10px">Zerar contagem e reaprender piso</button>
+  </div>
+  <button class="btn" id="calibDone" style="margin-top:16px">Concluir</button>
+</div>
+
+<nav>
+  <button data-v="run" class="on"><span class="ic">⏱</span>Treinar</button>
+  <button data-v="drills"><span class="ic">◎</span>Drills</button>
+  <button data-v="chal"><span class="ic">🏁</span>Desafios</button>
+  <button data-v="dash"><span class="ic">▦</span>Painel</button>
+  <button data-v="cfg"><span class="ic">⚙</span>Config</button>
+</nav>
+
+<script>
+"use strict";
+const KEY="cadencia_v1";
+const DEFAULT_DRILLS=[
+ {id:"saque",builtin:1,name:"Saque e 1 disparo",desc:"Tempo de saque até o 1º tiro.",shots:1,dist:7,par:1.5,pen:0,tag:"velocidade"},
+ {id:"moz",builtin:1,name:"Mozambique",desc:"2 tiros no peito + 1 na cabeça.",shots:3,dist:7,par:3.0,pen:0,tag:"velocidade"},
+ {id:"failure",builtin:1,name:"Failure to Stop",desc:"Variante do Mozambique com foco na precisão da cabeça.",shots:3,dist:7,par:3.5,pen:0,tag:"precisão"},
+ {id:"bill",builtin:1,name:"Bill Drill",desc:"6 tiros no centro, o mais rápido possível mantendo o acerto.",shots:6,dist:7,par:2.0,pen:0,tag:"velocidade"},
+ {id:"triple5",builtin:1,name:"Triple Nickel (5-5-5)",desc:'5 tiros em alvo de 5" a ~5m, par de 5s.',shots:5,dist:4.5,par:5.0,pen:0,tag:"precisão"},
+ {id:"r1r2",builtin:1,name:"Recarga 1-R-2",desc:"1 tiro, recarga de emergência (slide-lock), 2 tiros. Mag com 1 munição + mag cheio.",shots:3,dist:7,par:4.5,pen:0,tag:"recarga"},
+ {id:"rockreload",builtin:1,name:"Rock the Reload",desc:"1 tiro, troca de carregador, 1 tiro. Dois mags com 1 munição cada.",shots:2,dist:5,par:4.0,pen:0,tag:"recarga"},
+ {id:"cock",builtin:1,name:"Engatilha e dispara",desc:"Revólver em ação simples: engatilhar manualmente e disparar com precisão.",shots:2,dist:10,par:4.0,pen:0,tag:"precisão"},
+ {id:"malf",builtin:1,name:"Limpa pane e dispara",desc:"Com munição inerte no mag: dispara, encontra a pane, faz tap-rack e volta a atirar.",shots:2,dist:7,par:4.0,pen:0,tag:"recarga"},
+ {id:"fast",builtin:1,name:"FAST Drill",desc:'2 na cabeça (cartão 3x5"), recarga, 4 no corpo (círculo 8"). A 7m.',shots:6,dist:7,par:7.0,pen:0,tag:"recarga"},
+ {id:"elpres",builtin:1,name:"El Presidente",desc:"De costas: gira, saca, 2 tiros em cada um dos 3 alvos, recarrega, repete.",shots:12,dist:10,par:10.0,pen:0,tag:"recarga"},
+ {id:"casino",builtin:1,name:"Casino Drill",desc:"1 tiro no alvo 1, 2 no 2… até 6 no 6. 21 tiros, 2 recargas. +1s por erro.",shots:21,dist:4.5,par:21.0,pen:1,tag:"recarga"},
+ {id:"dot",builtin:1,name:"Dot Torture",desc:"50 tiros de precisão em alvos pequenos. Sem pressa, sem erro.",shots:50,dist:3,par:0,pen:0,tag:"precisão"},
+ {id:"doubletap",builtin:1,name:"Par Controlado",desc:"2 tiros rápidos no centro, controlando o recuo entre eles.",shots:2,dist:7,par:1.2,pen:0,tag:"velocidade"},
+ {id:"r1r1",builtin:1,name:"1-Reload-1",desc:"1 tiro, recarga de velocidade, 1 tiro. Carregador com 1 munição + carregador cheio.",shots:2,dist:7,par:4.0,pen:0,tag:"recarga"},
+ {id:"group5",builtin:1,name:"Grupamento (5 tiros)",desc:"5 tiros sem pressa; foco em fechar o menor grupo possível.",shots:5,dist:7,par:0,pen:0,tag:"precisão"},
+ {id:"type3",builtin:1,name:"Pane Tipo 3 — Alimentação Dupla",desc:"Monte com munição inerte na câmara + carregador cheio. Ao travar: trava o ferrolho atrás, remove o carregador, racka 3×, recarrega e racka, e volta a atirar.",shots:2,dist:7,par:6.0,pen:0,tag:"recarga",target:'Silhueta IPSC (A/C/D)'},
+ {id:"balldummy",builtin:1,name:"Bola e Manequim",desc:"Intercale munição inerte aleatória no carregador. Treina a ação imediata (tap-rack) sem saber quando vem a pane e expõe a antecipação do disparo (flinch).",shots:0,dist:7,par:0,pen:0,tag:"recarga",target:'Silhueta IPSC (A/C/D)'},
+ {id:"livre",builtin:1,name:"Treino livre",desc:"Conta os tiros que vierem, sem número fixo.",shots:0,dist:7,par:0,pen:0,tag:"livre"}
+];
+const DEFAULT_SETTINGS={dlyMin:1.5,dlyMax:4,sound:true,vibrate:true,flash:true,parBeep:true,wake:true,mic:true,sens:55,requireClip:false,audioDeviceId:"",beepVol:"alto",flashDouble:false,blockAdvance:"manual",blockRest:5};
+function load(){let db;try{db=JSON.parse(localStorage.getItem(KEY));}catch(e){db=null;}if(!db||typeof db!=="object")db={};
+ if(!Array.isArray(db.drills)||!db.drills.length)db.drills=JSON.parse(JSON.stringify(DEFAULT_DRILLS));
+ if(!Array.isArray(db.sessions))db.sessions=[];
+ if(!Array.isArray(db.challenges))db.challenges=[];
+ if(!Array.isArray(db.outbox))db.outbox=[]; // v5 online: fila de resultados a subir quando houver rede
+ if(!Array.isArray(db.profiles)||!db.profiles.length)db.profiles=[{id:"p0",name:"Eu"}];
+ if(!db.currentProfile)db.currentProfile=db.profiles[0].id;
+ db.settings=Object.assign({},DEFAULT_SETTINGS,db.settings||{});return db;}
+let DB=load(), MEM_ONLY=false;
+function save(){try{localStorage.setItem(KEY,JSON.stringify(DB));}catch(e){MEM_ONLY=true;}}
+/* ===== MIGRAÇÃO DE DRILLS (v4, item B) =====
+   Conserta a categorização das abas:
+   1) adiciona drills de fábrica que faltarem (por id);
+   2) re-sincroniza a tag dos drills builtin pelo mapa canônico (= DEFAULT_DRILLS,
+      por id) SEM tocar em nome/desc/params que o usuário tenha editado;
+   3) marca como "livre" qualquer drill personalizado sem tag.
+   É idempotente (rodar de novo não muda nada). Retorna true se algo mudou. */
+/* v5 E3: alvo recomendado padrão dos drills de fábrica (preenchido na migração). */
+const TARGET_MAP={saque:'Silhueta IPSC (A/C/D)',moz:'Silhueta IPSC (A/C/D)',failure:'Silhueta IPSC (cabeça)',bill:'Silhueta IPSC (zona A)',triple5:'Alvo de 5" / Bullseye',r1r2:'Silhueta IPSC (A/C/D)',rockreload:'Silhueta IPSC (A/C/D)',cock:'Bullseye / B8',malf:'Silhueta IPSC (A/C/D)',fast:'Cartão 3x5" + círculo 8"',elpres:'Silhueta IPSC (A/C/D) (3 alvos)',casino:'Silhueta IPSC (6 alvos)',dot:'Alvo de pontos (Dot Torture)',doubletap:'Silhueta IPSC (zona A)',r1r1:'Silhueta IPSC (A/C/D)',group5:'Bullseye / B8',type3:'Silhueta IPSC (A/C/D)',balldummy:'Silhueta IPSC (A/C/D)'};
+function migrateDrills(db){let changed=false;const canon={};DEFAULT_DRILLS.forEach(d=>canon[d.id]=d);
+ DEFAULT_DRILLS.forEach(d=>{if(!db.drills.some(x=>x.id===d.id)){db.drills.push(JSON.parse(JSON.stringify(d)));changed=true;}});
+ db.drills.forEach(d=>{
+   // tag: builtin re-sincroniza pelo mapa canônico, MAS v5 B3: não toca se o usuário escolheu (userTag)
+   if(d.builtin&&canon[d.id]){if(d.userTag!==true&&d.tag!==canon[d.id].tag){d.tag=canon[d.id].tag;changed=true;}}
+   else if(!d.tag){d.tag="livre";changed=true;}
+   // v5 E3: preenche o alvo recomendado dos builtin que ainda não têm (sem sobrescrever)
+   if(d.builtin&&!d.target&&TARGET_MAP[d.id]){d.target=TARGET_MAP[d.id];changed=true;}
+ });
+ return changed;}
+if(migrateDrills(DB))save(); // aplica a migração ao abrir o app (preserva dados existentes)
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const fmt=(n,d=2)=>Number(n).toFixed(d).replace(".",",");
+const drillById=id=>DB.drills.find(d=>d.id===id);
+const profName=id=>{const p=DB.profiles.find(x=>x.id===id);return p?p.name:"?";};
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* nav */
+$$("nav button").forEach(b=>b.onclick=()=>{const v=b.dataset.v;$$("nav button").forEach(x=>x.classList.toggle("on",x===b));$$(".view").forEach(x=>x.classList.remove("on"));$("#v-"+v).classList.add("on");if(v==="dash")renderDash();if(v==="drills")renderDrills();if(v==="chal")renderChal();window.scrollTo(0,0);});
+
+/* profiles */
+function renderProfiles(){
+ const fill=sel=>{sel.innerHTML="";DB.profiles.forEach(p=>{const o=document.createElement("option");o.value=p.id;o.textContent=p.name;sel.appendChild(o);});};
+ fill($("#profileSel"));$("#profileSel").value=DB.currentProfile;
+ if($("#dashProfile")){const o0='<option value="__all">Todos</option>';$("#dashProfile").innerHTML=o0;DB.profiles.forEach(p=>{const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("#dashProfile").appendChild(o);});}
+}
+$("#profileSel").onchange=e=>{DB.currentProfile=e.target.value;save();};
+$("#btnNewProfile").onclick=()=>{const n=prompt("Nome do atirador:");if(n&&n.trim()){const p={id:uid(),name:n.trim()};DB.profiles.push(p);DB.currentProfile=p.id;save();renderProfiles();}};
+
+/* setup */
+function fillDrillSelect(sel){sel.innerHTML="";DB.drills.forEach(d=>{const o=document.createElement("option");o.value=d.id;o.textContent=d.name;sel.appendChild(o);});}
+let runFilter="all"; // v5 D: filtro de categoria do Treinar (não persiste; volta a "Todos" ao abrir)
+/* Popula o seletor de drill do Treinar respeitando o filtro de categoria atual. */
+function fillRunDrills(){const sel=$("#selDrill"),prev=sel.value;sel.innerHTML="";DB.drills.filter(d=>runFilter==="all"||d.tag===runFilter).forEach(d=>{const o=document.createElement("option");o.value=d.id;o.textContent=d.name;sel.appendChild(o);});if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;else if(sel.options.length)sel.value=sel.options[0].value;}
+function refreshSetup(){fillRunDrills();showDrillSummary();const s=DB.settings;$("#dlyTxt").textContent=fmt(s.dlyMin,1)+" e "+fmt(s.dlyMax,1)+" s";$("#tgMic").checked=s.mic;}
+$$("#runDrillFilter button").forEach(b=>b.onclick=()=>{runFilter=b.dataset.t;$$("#runDrillFilter button").forEach(x=>x.classList.toggle("on",x===b));fillRunDrills();showDrillSummary();});
+function showDrillSummary(){const d=drillById($("#selDrill").value);if(!d)return;const box=$("#drillSummary");box.innerHTML="";if(d.desc){const p=document.createElement("p");p.className="note";p.style.cssText="margin:2px 2px 8px;width:100%";p.textContent=d.desc;box.appendChild(p);}const add=(l,v)=>{const c=document.createElement("span");c.className="chip";c.innerHTML=l+" <b>"+v+"</b>";box.appendChild(c);};add("Tiros",d.shots>0?d.shots:"livre");add("Distância",fmt(d.dist,1)+" m");if(d.par>0)add("Par",fmt(d.par,1)+" s");if(d.pen>0)add("Penal.",fmt(d.pen,1)+"s/erro");if(d.target)add("Alvo",esc(d.target));$("#inDist").value=d.dist;}
+$("#selDrill").onchange=showDrillSummary;
+$("#tgMic").onchange=e=>{DB.settings.mic=e.target.checked;save();};
+
+/* ===== AUDIO + MIC ===== */
+/* v3: detecção adaptativa de transiente.
+   - getFloatTimeDomainData (resolução real, sem 8-bit).
+   - mede PICO + RMS + fração de amostras "no teto" (clip) por quadro.
+   - o gatilho compara o pico contra um PISO de ruído aprendido (EWMA),
+     exigindo uma margem em dB. O slider só ajusta essa margem.
+   - guarda de eco: após um tiro, o nível-guarda decai e segura a cauda/reverberação. */
+let AC=null,analyser=null,micStream=null,micBuf=null,micProc=null;
+function ensureAC(){if(!AC)AC=new(window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended")AC.resume();return AC;}
+/* v4 (item D): beep redesenhado — dois osciladores (1000+1500 Hz, onda quadrada),
+   ~0,22s, ataque rápido + decaimento exponencial. O ganho final vem do setting
+   beepVol (baixo/médio/alto -> 0,5/0,75/1,0). O beep de fim de par usa o mesmo. */
+function beepGain(){return ({baixo:0.5,medio:0.75,alto:1.0})[DB.settings.beepVol]||1.0;}
+function beep(dur=0.22){if(!DB.settings.sound)return;try{const ac=ensureAC(),g=ac.createGain(),vol=beepGain(),t=ac.currentTime;[1000,1500].forEach(f=>{const o=ac.createOscillator();o.type="square";o.frequency.value=f;o.connect(g);o.start();o.stop(t+dur+0.02);});g.connect(ac.destination);g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+0.005);g.gain.exponentialRampToValueAtTime(0.001,t+dur);}catch(e){}}
+async function startMic(deviceId){try{const ac=ensureAC();const audio={echoCancellation:{ideal:false},noiseSuppression:{ideal:false},autoGainControl:{ideal:false}};if(deviceId)audio.deviceId={exact:deviceId};micStream=await navigator.mediaDevices.getUserMedia({audio});const src=ac.createMediaStreamSource(micStream);analyser=ac.createAnalyser();analyser.fftSize=2048;micBuf=new Float32Array(analyser.fftSize);src.connect(analyser);
+  // tenta ler o que o aparelho REALMENTE aplicou (alguns ignoram os pedidos)
+  try{micProc=micStream.getAudioTracks()[0].getSettings();}catch(e){micProc=null;}
+  return true;}catch(e){return false;}}
+function stopMic(){if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}analyser=null;micProc=null;}
+const DISP=1.0, CLIP_LVL=0.985; // DISP: barra em fração de escala plena; CLIP_LVL: amostra "no teto"
+/* lê um quadro e devolve pico, rms e fração clipada */
+function micFrame(){if(!analyser)return{peak:0,rms:0,clip:0};analyser.getFloatTimeDomainData(micBuf);let pk=0,sum=0,cl=0;const N=micBuf.length;for(let i=0;i<N;i++){const v=micBuf[i],a=v<0?-v:v;if(a>pk)pk=a;sum+=v*v;if(a>=CLIP_LVL)cl++;}return{peak:pk,rms:Math.sqrt(sum/N),clip:cl/N};}
+/* margem do slider: sens 99 -> +6 dB (fácil); sens 1 -> +30 dB (rígido) */
+function marginDb(s){s=Math.max(1,Math.min(99,s));return 6+(99-s)/98*24;}
+function marginFactor(s){return Math.pow(10,marginDb(s)/20);}
+/* estado adaptativo compartilhado entre calibração e treino */
+function newDetector(){return{floor:0,guard:0,lastT:-999,warm:8,wmin:9};}
+const ABS_GATE=0.015;      // pico mínimo absoluto pra cogitar um tiro (mata silêncio)
+const GUARD_DECAY=0.90;    // decaimento do nível-guarda por quadro (~120 ms p/ cair à metade)
+const GUARD_REARM=0.66;    // novo tiro precisa bater 66% do guarda que ainda decai
+const MIN_SPLIT_S=0.09;    // refratário fixo: 90 ms (mata eco; splits reais são >150 ms)
+/* atualiza o piso de ruído. Warm-up (~130ms) semeia com o mínimo, evitando falso
+   positivo quando o ambiente já começa barulhento (ex.: aparelho com ganho quente). */
+function updateFloor(det,peak){
+  if(det.warm>0){det.wmin=Math.min(det.wmin,peak);det.warm--;if(det.warm===0)det.floor=Math.max(det.wmin,0.004);return;}
+  if(peak<det.floor*4){det.floor=det.floor*0.93+peak*0.07;}   // ambiente: segue rápido
+  else{det.floor=det.floor*0.998+peak*0.002;}                  // transiente (tiro): quase congela
+  if(det.floor<0.003)det.floor=0.003;
+}
+function effThresh(det,sens){return Math.min(0.93,Math.max(det.floor*marginFactor(sens),det.guard*GUARD_REARM));}
+/* decide se o quadro atual é um tiro; nowS = tempo em segundos da referência atual */
+function isShot(det,fr,sens,nowS,requireClip){det.guard*=GUARD_DECAY;const warming=det.warm>0;const th=effThresh(det,sens);const ok=!warming&&fr.peak>=ABS_GATE&&fr.peak>=th&&(nowS-det.lastT)>MIN_SPLIT_S&&(!requireClip||fr.clip>0.0015);updateFloor(det,fr.peak);if(ok){det.lastT=nowS;det.guard=fr.peak;}return ok;}
+
+/* ===== CALIBRATION ===== */
+let calibRAF=null,calibCount=0,calDet=null;
+async function openCalib(){
+ $("#calib").classList.add("on");
+ $("#calSens").value=DB.settings.sens;$("#calSensVal").textContent=Math.round(marginDb(DB.settings.sens))+" dB";
+ const ok=await startMic(DB.settings.audioDeviceId||undefined);
+ if(!ok){alert("Microfone indisponível. Verifique a permissão e se o app está em HTTPS.");closeCalib();return;}
+ // populate devices (labels available after permission)
+ try{const devs=await navigator.mediaDevices.enumerateDevices();const ins=devs.filter(d=>d.kind==="audioinput");const sel=$("#audioDev");sel.innerHTML='<option value="">Padrão do dispositivo</option>';ins.forEach((d,i)=>{const o=document.createElement("option");o.value=d.deviceId;o.textContent=d.label||("Microfone "+(i+1));sel.appendChild(o);});sel.value=DB.settings.audioDeviceId||"";}catch(e){}
+ // status do processamento de áudio que o APARELHO de fato aplicou
+ showMicProc();
+ if($("#calClip"))$("#calClip").checked=!!DB.settings.requireClip;
+ calibCount=0;$("#calCount").textContent="0";calDet=newDetector();
+ const loop=()=>{const fr=micFrame();const nowS=performance.now()/1000;const sens=+$("#calSens").value;
+   const th=effThresh(calDet,sens);
+   if(isShot(calDet,fr,sens,nowS,!!DB.settings.requireClip)){calibCount++;$("#calCount").textContent=calibCount;}
+   $("#calibFill").style.width=Math.min(100,fr.peak/DISP*100)+"%";
+   $("#calibMark").style.left=Math.min(100,th/DISP*100)+"%";
+   if($("#calibFloor"))$("#calibFloor").style.left=Math.min(100,calDet.floor/DISP*100)+"%";
+   $("#calPeak").textContent=Math.round(fr.peak/DISP*100)+"%";
+   if($("#calFloorV"))$("#calFloorV").textContent=Math.round(calDet.floor/DISP*100)+"%";
+   if($("#calClipV"))$("#calClipV").textContent=fr.clip>0?(fr.clip*100).toFixed(1)+"%":"0%";
+   calibRAF=requestAnimationFrame(loop);};loop();
+}
+function showMicProc(){const el=$("#micProc");if(!el)return;if(!micProc){el.textContent="";el.className="note";return;}
+ const agc=micProc.autoGainControl,ns=micProc.noiseSuppression,ec=micProc.echoCancellation;
+ const on=v=>v===true,bad=on(agc)||on(ns)||on(ec);
+ let parts=[];if("autoGainControl"in micProc)parts.push("ganho auto "+(on(agc)?"LIGADO":"desligado"));if("noiseSuppression"in micProc)parts.push("redução de ruído "+(on(ns)?"LIGADA":"desligada"));
+ if(!parts.length){el.textContent="Aparelho não informa o que aplica no áudio.";el.className="note";return;}
+ el.innerHTML=(bad?"⚠ ":"✓ ")+"Este aparelho: "+parts.join(" · ")+(bad?". Ele <b>ignorou</b> o pedido de desligar — por isso pode estourar. O modo adaptativo compensa, e \"exigir impacto forte\" ajuda.":". Tudo certo.");
+ el.className="banner on";el.style.marginTop="10px";
+}
+function closeCalib(){if(calibRAF)cancelAnimationFrame(calibRAF);calibRAF=null;stopMic();$("#calib").classList.remove("on");}
+$("#btnCalibOpen").onclick=openCalib;$("#btnCalibOpen2").onclick=openCalib;
+$("#calibDone").onclick=closeCalib;
+$("#calReset").onclick=()=>{calibCount=0;$("#calCount").textContent="0";if(calDet)calDet=newDetector();};
+$("#calSens").oninput=e=>{DB.settings.sens=+e.target.value;$("#calSensVal").textContent=Math.round(marginDb(+e.target.value))+" dB";save();};
+$("#calClip").onchange=e=>{DB.settings.requireClip=e.target.checked;save();if(calDet)calDet=newDetector();};
+$("#audioDev").onchange=async e=>{DB.settings.audioDeviceId=e.target.value;save();stopMic();await startMic(e.target.value||undefined);showMicProc();if(calDet)calDet=newDetector();};
+
+/* ===== RUN ===== */
+let run=null,wakeLock=null,block=null,blockMetric="total";
+$("#btnStart").onclick=()=>startRun(null);
+$("#btnAbort").onclick=()=>endConsole();
+$("#btnStop").onclick=stopRun;
+async function reqWake(){if(DB.settings.wake&&"wakeLock"in navigator){try{wakeLock=await navigator.wakeLock.request("screen");}catch(e){}}}
+function relWake(){if(wakeLock){wakeLock.release().catch(()=>{});wakeLock=null;}}
+/* v4 (item A): startRun monta o BLOCO (drill/arma/calibre/distância/N travados) e
+   dispara a 1ª repetição. Desafio = sempre corrida única (sem bloco). */
+async function startRun(challenge){
+ const drillId=challenge?challenge.drillId:$("#selDrill").value;const d=drillById(drillId);if(!d)return;
+ if(challenge){block=null;}
+ else{const size=Math.max(1,Math.min(50,parseInt($("#inReps").value,10)||1));
+   /* v5 A: modo de avanço; Automático exige nº fixo de tiros, senão cai para Manual */
+   let adv=DB.settings.blockAdvance==="auto"?"auto":"manual";
+   if(adv==="auto"&&d.shots<=0){adv="manual";if(size>1)alert("Modo automático precisa de drill com nº fixo de tiros — usando avanço manual.");}
+   block={id:uid(),drillId:d.id,weapon:$("#selWeapon").value,cal:$("#inCal").value.trim(),dist:+$("#inDist").value,size:size,cur:0,reps:[],advance:adv};}
+ ensureAC();reqWake();beginRep(d,challenge,1);
+}
+/* v4 (item A): executa UMA repetição (standby -> GO). Reaproveita todo o fluxo v3
+   (atraso aleatório re-sorteado, pré-loop de piso de ruído, auto-stop). O objeto run
+   carrega blockId/repIndex/blockSize sempre (mesmo com N=1). */
+async function beginRep(d,challenge,repIndex){
+ if(block)block.cur=repIndex;
+ run={drill:d,challenge:challenge,beepAt:0,shots:[],started:false,raf:null,preRaf:null,parTimer:null,det:newDetector(),useMic:DB.settings.mic,
+   weapon:block?block.weapon:$("#selWeapon").value,cal:block?block.cal:$("#inCal").value.trim(),dist:block?block.dist:(challenge?challenge.dist:+$("#inDist").value),
+   blockId:block?block.id:uid(),repIndex:repIndex||1,blockSize:block?block.size:1};
+ $("#setup").classList.add("hidden");$("#review").classList.add("hidden");$("#blockNext").classList.add("hidden");$("#blockReport").classList.add("hidden");
+ const c=$("#console");c.classList.add("on");$("#feed").innerHTML="";$("#conClock").innerHTML='0.00<span class="u">s</span>';
+ $("#conState").textContent="STANDBY";$("#conState").classList.remove("live");$("#conClock").classList.remove("live");$("#btnStop").style.display="none";
+ $("#conLvl").style.display=run.useMic?"block":"none";$("#micBanner").classList.remove("on");
+ if(run.useMic){const ok=await startMic(DB.settings.audioDeviceId||undefined);if(!ok){run.useMic=false;$("#conLvl").style.display="none";$("#micBanner").classList.add("on");$("#micBanner").innerHTML="Microfone indisponível — treino por <b>tempo total</b>. Pare no último tiro.";}else{preLoop();}}
+ const s=DB.settings,delay=(s.dlyMin+Math.random()*Math.max(0,(s.dlyMax-s.dlyMin)))*1000;run.goTimer=setTimeout(go,delay);
+}
+/* aprende o piso de ruído do ambiente enquanto espera o beep (largada aleatória) */
+function preLoop(){if(!run||run.started||!run.useMic)return;const fr=micFrame();updateFloor(run.det,fr.peak);$("#conLvlFill").style.width=Math.min(100,fr.peak/DISP*100)+"%";run.preRaf=requestAnimationFrame(preLoop);}
+function go(){if(!run)return;if(run.preRaf)cancelAnimationFrame(run.preRaf);run.det.lastT=-999;run.det.guard=0;run.beepAt=performance.now();run.started=true;beep();if(DB.settings.vibrate&&navigator.vibrate)navigator.vibrate([90,40,90]);const c=$("#console");if(DB.settings.flash){const fc=DB.settings.flashDouble?"flash2":"flash";c.classList.remove("flash","flash2");void c.offsetWidth;c.classList.add(fc);}$("#conState").textContent="GO";$("#conState").classList.add("live");$("#conClock").classList.add("live");$("#btnStop").style.display="";if(run.drill.par>0&&DB.settings.parBeep)run.parTimer=setTimeout(()=>beep(),run.drill.par*1000);loop();}
+function loop(){if(!run||!run.started)return;const now=(performance.now()-run.beepAt)/1000;$("#conClock").innerHTML=fmt(now,2)+'<span class="u">s</span>';if(run.useMic){const fr=micFrame();$("#conLvlFill").style.width=Math.min(100,fr.peak/DISP*100)+"%";if(isShot(run.det,fr,DB.settings.sens,now,!!DB.settings.requireClip))registerShot(now);}run.raf=requestAnimationFrame(loop);}
+function registerShot(t){run.shots.push(t);const i=run.shots.length,split=i>1?t-run.shots[i-2]:null;const el=document.createElement("div");el.className="shotline";el.innerHTML='<span class="n">#'+i+'</span><span class="t">'+fmt(t,2)+'s</span><span class="s">'+(split!==null?("+"+fmt(split,2)):"1º tiro")+'</span>';const feed=$("#feed");feed.appendChild(el);feed.scrollTop=feed.scrollHeight;if(run.drill.shots>0&&run.shots.length>=run.drill.shots)setTimeout(()=>{if(run&&run.started)stopRun();},250);}
+function stopRun(){if(!run)return;if(run.raf)cancelAnimationFrame(run.raf);if(run.preRaf)cancelAnimationFrame(run.preRaf);if(run.parTimer)clearTimeout(run.parTimer);run.started=false;run.total=run.shots.length?run.shots[run.shots.length-1]:(performance.now()-run.beepAt)/1000;stopMic();relWake();$("#console").classList.remove("on");if(block&&block.size>1&&block.advance==="auto"){autoRepDone();return;}showReview();}
+function endConsole(){if(run){if(run.raf)cancelAnimationFrame(run.raf);if(run.preRaf)cancelAnimationFrame(run.preRaf);if(run.parTimer)clearTimeout(run.parTimer);if(run.goTimer)clearTimeout(run.goTimer);}if(blockRestTimer){clearInterval(blockRestTimer);blockRestTimer=null;}stopMic();relWake();run=null;block=null;/* v4: cancelar aborta o bloco; repetições já salvas permanecem no histórico */$("#console").classList.remove("on");$("#setup").classList.remove("hidden");goTab("run");}
+
+/* review + score */
+let scoreMode="simple";
+function showReview(){goTab("run");/* v4 item C: garante a aba Treinar ativa antes de revelar a revisão — conserta salvar pós-desafio */$("#review").classList.remove("hidden");const shots=run.shots,total=run.total;$("#rTotal").textContent=fmt(total,2)+"s";$("#rFirst").textContent=shots.length?fmt(shots[0],2)+"s":"—";$("#rShots").textContent=shots.length+(run.drill.shots>0?(" / "+run.drill.shots):"");const sb=$("#splitsBox");if(shots.length>1){sb.style.display="";let h="";for(let i=1;i<shots.length;i++)h+='<div class="shotline"><span class="n">split '+i+'→'+(i+1)+'</span><span class="s">+'+fmt(shots[i]-shots[i-1],2)+'s</span></div>';sb.innerHTML=h;}else sb.style.display="none";if(run.drill.shots>0){$("#inHits").value=run.drill.shots;$("#inMiss").value=0;}else{$("#inHits").value=shots.length||0;$("#inMiss").value=0;}["inA","inC","inD","inMs"].forEach(id=>$("#"+id).value=0);$("#inNotes").value="";$("#rCorrWrap").style.display=run.drill.pen>0?"flex":"none";computeScore();
+ /* v4 (item A): rótulo da repetição e textos dos botões conforme o bloco */
+ const inB=block&&block.size>1;const rt=$("#reviewRepTag");if(rt)rt.textContent=inB?("Repetição "+block.cur+" / "+block.size):"";
+ $("#btnSave").textContent=inB?(block.cur<block.size?"Salvar e próxima ▶":"Salvar e ver relatório"):"Salvar treino";
+ $("#btnDiscard").textContent=inB?"Descartar repetição":"Descartar";
+ $("#review").scrollIntoView({behavior:"smooth"});}
+$$("#scoreMode button").forEach(b=>b.onclick=()=>{scoreMode=b.dataset.m;$$("#scoreMode button").forEach(x=>x.classList.toggle("on",x===b));$("#scoreSimple").classList.toggle("hidden",scoreMode!=="simple");$("#scoreIpsc").classList.toggle("hidden",scoreMode!=="ipsc");computeScore();});
+["inHits","inMiss","inA","inC","inD","inMs"].forEach(id=>$("#"+id).oninput=computeScore);
+function currentScore(){let hits,miss,points;if(scoreMode==="ipsc"){const a=+$("#inA").value||0,c=+$("#inC").value||0,d=+$("#inD").value||0,ms=+$("#inMs").value||0;hits=a+c+d;miss=ms;points=a*5+c*3+d-ms*10;}else{hits=+$("#inHits").value||0;miss=+$("#inMiss").value||0;points=hits;}const tot=hits+miss,acc=tot>0?hits/tot*100:0;const corr=run?run.total+miss*(run.drill.pen||0):0;const hf=run&&run.total>0?Math.max(0,points)/run.total:0;return{hits,miss,points,acc,hf,corr};}
+function computeScore(){const s=currentScore();$("#rAcc").textContent=fmt(s.acc,0)+"%";$("#rHF").textContent=fmt(s.hf,2);if(run&&run.drill.pen>0)$("#rCorr").textContent=fmt(s.corr,2)+"s";}
+/* v5 A4: monta a sessão a partir do run atual. scored=false => repetição de bloco
+   Automático (NÃO pontuada): hits/hf/acc ficam 0 e a sessão sai das médias de HF/precisão. */
+function buildSession(sc,scored){return{id:uid(),date:new Date().toISOString(),profileId:DB.currentProfile,profileName:profName(DB.currentProfile),drillId:run.drill.id,drillName:run.drill.name,challengeId:run.challenge?run.challenge.id:null,weapon:run.weapon,cal:run.cal,dist:run.dist,total:+run.total.toFixed(3),first:run.shots.length?+run.shots[0].toFixed(3):null,splits:run.shots.slice(1).map((t,i)=>+(t-run.shots[i]).toFixed(3)),nShots:run.shots.length,expShots:run.drill.shots,hits:sc.hits||0,miss:sc.miss||0,points:sc.points||0,acc:+((sc.acc||0).toFixed(1)),hf:+((sc.hf||0).toFixed(3)),corr:+((sc.corr||0).toFixed(3)),scored:scored!==false,blockId:run.blockId,repIndex:run.repIndex,blockSize:run.blockSize,notes:scored===false?"":$("#inNotes").value.trim()};}
+$("#btnDiscard").onclick=()=>{
+ if(block&&block.size>1){$("#review").classList.add("hidden");/* descarta só esta repetição e avança */if(block.cur<block.size)showBlockNext(block.cur+1);else showBlockReport();return;}
+ const ch=run&&run.challenge;run=null;block=null;$("#review").classList.add("hidden");$("#setup").classList.remove("hidden");window.scrollTo(0,0);if(ch&&ch.online)setPresence(ch.code,"terminou");if(ch){goTab("chal");openChalDetail(ch.id);}};
+$("#btnSave").onclick=()=>{const sess=buildSession(currentScore(),true);DB.sessions.push(sess);save();const ch=run.challenge;if(ch&&ch.online)submitOnlineResult(ch,sess);
+ if(block&&block.size>1){block.reps.push(sess);$("#review").classList.add("hidden");if(block.cur<block.size)showBlockNext(block.cur+1);else showBlockReport();return;}
+ run=null;block=null;$("#review").classList.add("hidden");$("#setup").classList.remove("hidden");window.scrollTo(0,0);if(MEM_ONLY)alert("Salvo só nesta sessão — para persistir, abra via HTTPS.");if(ch){goTab("chal");openChalDetail(ch.id);}else{goTab("dash");renderDash();}};
+function goTab(v){$$("nav button").forEach(x=>x.classList.toggle("on",x.dataset.v===v));$$(".view").forEach(x=>x.classList.remove("on"));$("#v-"+v).classList.add("on");}
+
+/* ===== MODO BLOCO (v4, item A) =====
+   block = {id, drillId, weapon, cal, dist, size, cur, reps[]}. Cada repetição salva
+   também é uma sessão normal em DB.sessions; block.reps guarda as do bloco atual. */
+const chipInto=(box,l,v)=>{const c=document.createElement("span");c.className="chip";c.innerHTML=l+" <b>"+v+"</b>";box.appendChild(c);};
+let blockRestTimer=null; // v5 A3: timer da contagem regressiva de descanso (modo Automático)
+/* v5 A3: repetição do modo Automático terminou — salva sessão NÃO pontuada e segue. */
+function autoRepDone(){const sess=buildSession({},false);DB.sessions.push(sess);save();block.reps.push(sess);if(block.cur>=block.size)showBlockReport();else showBlockRest();}
+/* v5 A3: tela de descanso entre reps; ao zerar a contagem, dispara a próxima rep sozinha. */
+function showBlockRest(){if(!block)return;goTab("run");["setup","review","blockNext","blockReport"].forEach(p=>$("#"+p).classList.add("hidden"));$("#blockRestTitle").textContent="Repetição "+block.cur+"/"+block.size+" concluída";const next=block.cur+1;let secs=Math.max(0,Math.round(DB.settings.blockRest||0));$("#blockRestCount").textContent=secs;$("#blockRest").classList.remove("hidden");$("#blockRest").scrollIntoView({behavior:"smooth"});if(blockRestTimer)clearInterval(blockRestTimer);const fire=()=>{if(blockRestTimer){clearInterval(blockRestTimer);blockRestTimer=null;}$("#blockRest").classList.add("hidden");const d=drillById(block.drillId);if(d){ensureAC();reqWake();beginRep(d,null,next);}};if(secs<=0){fire();return;}blockRestTimer=setInterval(()=>{secs--;if(secs<=0)fire();else $("#blockRestCount").textContent=secs;},1000);}
+$("#btnStopBlock").onclick=()=>{if(blockRestTimer){clearInterval(blockRestTimer);blockRestTimer=null;}showBlockReport();};
+/* A7: tela "Preparar próxima (i/N)" — avanço manual para a repetição i. */
+function showBlockNext(i){if(!block)return;goTab("run");$("#setup").classList.add("hidden");$("#review").classList.add("hidden");$("#blockReport").classList.add("hidden");const d=drillById(block.drillId);const info=$("#blockNextInfo");info.innerHTML="";chipInto(info,"Drill",esc(d?d.name:"?"));chipInto(info,"Arma",esc(block.weapon+" "+block.cal));chipInto(info,"Distância",fmt(block.dist,1)+"m");$("#blockNextTitle").textContent="Repetição "+i+" de "+block.size;$("#btnNextRep").textContent="▶ Iniciar repetição "+i;$("#blockNext").classList.remove("hidden");$("#blockNext").scrollIntoView({behavior:"smooth"});}
+$("#btnNextRep").onclick=()=>{if(!block)return;const d=drillById(block.drillId);if(!d)return;ensureAC();reqWake();beginRep(d,null,block.cur+1);};
+$("#btnEndBlock").onclick=()=>{$("#blockNext").classList.add("hidden");endBlock();};
+/* Encerrar bloco: relatório com o que houver; se nada foi salvo, volta ao setup. */
+function endBlock(){if(block&&block.reps.length){showBlockReport();}else{block=null;run=null;$("#blockNext").classList.add("hidden");$("#blockReport").classList.add("hidden");$("#setup").classList.remove("hidden");goTab("run");window.scrollTo(0,0);}}
+/* Agregados do bloco. Consistência = desvio-padrão POPULACIONAL dos tempos totais
+   (menor = melhor); com <2 repetições retorna null -> exibido como "—". */
+function blockStats(){const reps=block.reps,mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+ const scoredReps=reps.filter(s=>s.scored!==false);const tots=reps.map(s=>s.total).filter(v=>v>0),firsts=reps.map(s=>s.first).filter(v=>v!=null&&v>0),hfs=scoredReps.map(s=>s.hf).filter(v=>v>0),accs=scoredReps.map(s=>s.acc).filter(v=>v>=0);
+ const m=mean(tots),sd=tots.length>1?Math.sqrt(mean(tots.map(v=>(v-m)*(v-m)))):null;
+ return{n:reps.length,bestTime:tots.length?Math.min(...tots):null,avgTime:tots.length?m:null,worstTime:tots.length?Math.max(...tots):null,bestFirst:firsts.length?Math.min(...firsts):null,bestHF:hfs.length?Math.max(...hfs):null,avgHF:hfs.length?mean(hfs):null,avgAcc:accs.length?mean(accs):null,sd:sd};}
+/* A8: tela Relatório do Bloco (cabeçalho + cartões agregados + gráfico + tabela). */
+function showBlockReport(){if(!block)return;goTab("run");$("#setup").classList.add("hidden");$("#review").classList.add("hidden");$("#blockNext").classList.add("hidden");
+ const d=drillById(block.drillId),st=blockStats(),info=$("#blockRepInfo");info.innerHTML="";
+ chipInto(info,"Drill",esc(d?d.name:"?"));chipInto(info,"Arma",esc(block.weapon+" "+block.cal));chipInto(info,"Distância",fmt(block.dist,1)+"m");
+ chipInto(info,"Reps",st.n+" de "+block.size+(st.n<block.size?" — parcial":""));
+ const tt=v=>v==null?"—":fmt(v,2)+"s";
+ const cards=[["Melhor tempo",tt(st.bestTime),"good"],["Tempo médio",tt(st.avgTime),""],["Pior tempo",tt(st.worstTime),"sig"],["Melhor 1º tiro",tt(st.bestFirst),"good"],["Melhor HF",st.bestHF==null?"—":fmt(st.bestHF,2),"brass"],["HF médio",st.avgHF==null?"—":fmt(st.avgHF,2),""],["Precisão média",st.avgAcc==null?"—":fmt(st.avgAcc,0)+"%",""],["Consistência (DP tempo)",st.sd==null?"—":fmt(st.sd,2)+"s",""]];
+ $("#blockRepCards").innerHTML=cards.map(c=>'<div class="stat"><span class="k">'+c[0]+'</span><span class="v '+c[2]+'">'+c[1]+'</span></div>').join("");
+ renderBlockTable();blockMetric="total";$$("#blockMetric button").forEach(x=>x.classList.toggle("on",x.dataset.k==="total"));drawBlockChart();
+ $("#blockReport").classList.remove("hidden");$("#blockReport").scrollIntoView({behavior:"smooth"});}
+/* Tabela por repetição; clicar numa linha reabre o detalhe da sessão (showSession). */
+function renderBlockTable(){const list=$("#blockTable");list.innerHTML="";block.reps.forEach(s=>{const sa=(s.splits&&s.splits.length)?fmt(s.splits.reduce((a,b)=>a+b,0)/s.splits.length,2)+"s":"—";const el=document.createElement("div");el.className="hrow";el.innerHTML='<div class="hf">'+fmt(s.hf,2)+'</div><div class="mid"><div class="t1">Rep '+s.repIndex+'</div><div class="t2">'+fmt(s.total,2)+'s · 1º '+(s.first!=null?fmt(s.first,2)+'s':'—')+' · tiros '+s.nShots+(s.expShots>0?('/'+s.expShots):'')+' · split '+sa+' · '+s.acc+'%</div></div>';el.onclick=()=>showSession(s);list.appendChild(el);});}
+function blockMetricVal(s){return blockMetric==="hf"?s.hf:blockMetric==="first"?(s.first||0):s.total;}
+/* Gráfico de barras: uma barra por repetição na métrica selecionada (tendência/fadiga). */
+function drawBlockChart(){const cv=$("#blockChart");if(!cv||!block)return;const reps=block.reps;const dpr=window.devicePixelRatio||1,W=cv.clientWidth||320,H=150;cv.width=W*dpr;cv.height=H*dpr;const g=cv.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);$("#blockChartCap").textContent=blockMetric==="hf"?"Hit factor por repetição (maior é melhor)":blockMetric==="first"?"1º tiro por repetição (menor é melhor)":"Tempo total por repetição (menor é melhor)";const vals=reps.map(blockMetricVal);if(!vals.length){g.fillStyle="#6b7484";g.font="12px ui-monospace";g.textAlign="center";g.fillText("Sem dados.",W/2,H/2);return;}const mx=Math.max(...vals,0.0001),PL=10,PR=10,PT=14,PB=22,w=W-PL-PR,h=H-PT-PB,n=vals.length,bw=Math.min(46,w/n*0.6);vals.forEach((v,i)=>{const x=PL+(i+0.5)*(w/n),bh=mx>0?(v/mx)*h:0,y=PT+h-bh;g.fillStyle="#c79049";g.fillRect(x-bw/2,y,bw,bh);g.fillStyle="#9aa3b2";g.font="9px ui-monospace";g.textAlign="center";g.fillText(fmt(v,2),x,Math.max(PT-2,y-4));g.fillStyle="#6b7484";g.fillText("R"+reps[i].repIndex,x,PT+h+14);});}
+$$("#blockMetric button").forEach(b=>b.onclick=()=>{blockMetric=b.dataset.k;$$("#blockMetric button").forEach(x=>x.classList.toggle("on",x===b));drawBlockChart();});
+$("#btnBlockDone").onclick=()=>{block=null;run=null;$("#blockReport").classList.add("hidden");$("#setup").classList.remove("hidden");goTab("dash");renderDash();window.scrollTo(0,0);};
+
+/* ===== DRILLS CRUD ===== */
+let drillFilter="all";
+$$("#drillFilter button").forEach(b=>b.onclick=()=>{drillFilter=b.dataset.t;$$("#drillFilter button").forEach(x=>x.classList.toggle("on",x===b));renderDrills();});
+function renderDrills(){const list=$("#drillList");list.innerHTML="";DB.drills.filter(d=>drillFilter==="all"||d.tag===drillFilter).forEach(d=>{const el=document.createElement("div");el.className="drill";el.innerHTML='<div class="top"><h3>'+esc(d.name)+'</h3></div>'+(d.desc?'<p>'+esc(d.desc)+'</p>':'')+'<div class="meta"><span class="tag">'+esc(d.tag||"")+'</span><span class="chip">Tiros <b>'+(d.shots>0?d.shots:"livre")+'</b></span><span class="chip">Dist <b>'+fmt(d.dist,1)+'m</b></span>'+(d.target?'<span class="chip">Alvo <b>'+esc(d.target)+'</b></span>':'')+(d.par>0?'<span class="chip">Par <b>'+fmt(d.par,1)+'s</b></span>':'')+(d.pen>0?'<span class="chip">+'+fmt(d.pen,1)+'s/erro</span>':'')+'</div>';const top=el.querySelector(".top");const btns=document.createElement("div");btns.style.cssText="display:flex;gap:6px";const e=document.createElement("button");e.className="btn ghost sm";e.textContent="Editar";e.onclick=()=>openDrillForm(d);btns.appendChild(e);if(!d.builtin){const x=document.createElement("button");x.className="btn danger sm";x.textContent="✕";x.onclick=()=>{if(confirm('Apagar "'+d.name+'"?')){DB.drills=DB.drills.filter(y=>y.id!==d.id);save();renderDrills();refreshSetup();}};btns.appendChild(x);}top.appendChild(btns);list.appendChild(el);});}
+function openDrillForm(d){$("#drillForm").classList.remove("hidden");$("#dfId").value=d?d.id:"";$("#dfName").value=d?d.name:"";$("#dfDesc").value=d?d.desc:"";$("#dfShots").value=d?d.shots:3;$("#dfDist").value=d?d.dist:7;$("#dfPar").value=d?d.par:0;$("#dfPen").value=d?(d.pen||0):0;$("#dfTag").value=d?(d.tag||"livre"):"livre";$("#dfTarget").value=d?(d.target||""):"";$("#dfName").disabled=!!(d&&d.builtin);$("#dfTag").disabled=false;$("#drillForm").scrollIntoView({behavior:"smooth"});}
+$("#btnNewDrill").onclick=()=>openDrillForm(null);
+$("#btnCancelDrill").onclick=()=>$("#drillForm").classList.add("hidden");
+$("#btnSaveDrill").onclick=()=>{const name=$("#dfName").value.trim();if(!name){alert("Dê um nome.");return;}const id=$("#dfId").value,data={name,desc:$("#dfDesc").value.trim(),shots:+$("#dfShots").value||0,dist:+$("#dfDist").value||0,par:+$("#dfPar").value||0,pen:+$("#dfPen").value||0,tag:$("#dfTag").value||"livre",userTag:true,target:$("#dfTarget").value.trim()};if(id){Object.assign(drillById(id),data);}else DB.drills.push(Object.assign({id:uid(),builtin:0},data));save();$("#drillForm").classList.add("hidden");renderDrills();refreshSetup();};
+
+/* ===== CHALLENGES ===== */
+let curChal=null, cfMode="local";
+function renderChal(){fillDrillSelect($("#cfDrill"));$("#chalDetail").classList.add("hidden");$("#chalForm").classList.add("hidden");const list=$("#chalList");list.style.display="";list.innerHTML="";if(!DB.challenges.length){list.innerHTML='<div class="empty"><div class="big">🏁</div>Nenhum desafio ainda.<br>Crie um e chame a galera pra entrar.</div>';return;}DB.challenges.forEach(ch=>{const n=DB.sessions.filter(s=>s.challengeId===ch.id).length;const d=drillById(ch.drillId);const el=document.createElement("div");el.className="drill";el.style.cursor="pointer";el.innerHTML='<div class="top"><h3>'+esc(ch.name)+'</h3><span class="chip">'+n+' part.</span></div><div class="meta"><span class="chip">'+esc(d?d.name:(ch.drillName||"?"))+'</span><span class="chip">'+fmt(ch.dist,1)+'m</span>'+(ch.online?'<span class="tag">🌐 online</span>':'')+'<span class="tag">rank: '+(ch.metric==="hf"?"hit factor":ch.metric==="total"?"tempo":"1º tiro")+'</span></div>';el.onclick=()=>openChalDetail(ch.id);list.appendChild(el);});}
+$("#btnNewChal").onclick=()=>{$("#chalForm").classList.remove("hidden");$("#cfName").value="";$("#cfDist").value=7;cfMode="local";$$("#cfMode button").forEach(x=>x.classList.toggle("on",x.dataset.m==="local"));};
+$("#btnCancelChal").onclick=()=>$("#chalForm").classList.add("hidden");
+$("#btnSaveChal").onclick=()=>{const name=$("#cfName").value.trim();if(!name){alert("Dê um nome ao desafio.");return;}
+ if(cfMode==="online"){createOnlineChallenge(name,$("#cfDrill").value,+$("#cfDist").value||7,$("#cfMetric").value).then(ch=>{renderChal();openChalDetail(ch.id);}).catch(()=>alert("Não foi possível criar online agora (sem rede ou Firebase desligado)."));return;}
+ DB.challenges.push({id:uid(),name,drillId:$("#cfDrill").value,dist:+$("#cfDist").value||7,metric:$("#cfMetric").value,createdAt:new Date().toISOString()});save();renderChal();};
+function openChalDetail(id){detachChal();curChal=DB.challenges.find(c=>c.id===id);if(!curChal)return;$("#chalList").style.display="none";$("#chalForm").classList.add("hidden");$("#chalDetail").classList.remove("hidden");if(curChal.online){openOnlineDetail(curChal);return;}$("#chalOnlineBox").classList.add("hidden");const d=drillById(curChal.drillId);$("#chalDetailTitle").textContent=curChal.name;const info=$("#chalInfo");info.innerHTML="";const add=(l,v)=>{const c=document.createElement("span");c.className="chip";c.innerHTML=l+" <b>"+v+"</b>";info.appendChild(c);};add("Drill",esc(d?d.name:"?"));add("Distância",fmt(curChal.dist,1)+"m");add("Ranking por",curChal.metric==="hf"?"hit factor":curChal.metric==="total"?"menor tempo":"1º tiro");renderRank();}
+$("#btnBackChal").onclick=()=>{detachChal();curChal=null;renderChal();};
+$("#btnEnterChal").onclick=()=>{if(!curChal)return;if(curChal.online){if(!drillById(curChal.drillId)){alert("Esse drill não existe na sua biblioteca neste aparelho.");return;}ensureOnline().then(ok=>{if(ok)setPresence(curChal.code,"atirando");});}startRun(curChal);};
+function renderRank(){const m=curChal.metric;let arr=DB.sessions.filter(s=>s.challengeId===curChal.id);const val=s=>m==="hf"?s.hf:m==="total"?s.total:(s.first||9999);const high=m==="hf";const best={};arr.forEach(s=>{const k=s.profileId,v=val(s);if(!(k in best)||(high?v>val(best[k]):v<val(best[k])))best[k]=s;});let rows=Object.values(best).sort((a,b)=>high?val(b)-val(a):val(a)-val(b));const list=$("#rankList");list.innerHTML="";if(!rows.length){list.innerHTML='<div class="empty">Sem participações ainda. Seja o primeiro!</div>';return;}rows.forEach((s,i)=>{const el=document.createElement("div");el.className="rank";const medal=i===0?"🥇":i===1?"🥈":i===2?"🥉":(i+1);el.innerHTML='<div class="pos '+(i<3?"g"+(i+1):"")+'">'+medal+'</div><div class="who"><div class="n">'+esc(s.profileName)+'</div><div class="d">'+new Date(s.date).toLocaleDateString("pt-BR")+' · '+esc(s.weapon)+' '+esc(s.cal)+' · '+s.acc+'%</div></div><div class="sc">'+(m==="hf"?fmt(s.hf,2):fmt(val(s),2)+"s")+'</div>';list.appendChild(el);});}
+
+/* ============================================================================
+   MÓDULO ONLINE (v5) — Firebase: Authentication anônimo + Firestore (multiplayer).
+   ----------------------------------------------------------------------------
+   PÚBLICO POR DESIGN: a config web do Firebase vai embarcada no cliente de propósito;
+   a segurança é feita pelas REGRAS do Firestore (entregues à parte), NÃO por esconder
+   a chave. Todo este módulo é LAZY e TOLERANTE A FALHA: se o Firebase não carregar ou
+   estiver offline, o app local segue 100% funcional. Só resultados de desafio ONLINE
+   sobem; treino pessoal e histórico permanecem locais.
+   ============================================================================ */
+
+/* >>>>>>>>>>>>>>  CONFIG DO FIREBASE (ajuste aqui se trocar de projeto)  <<<<<<<<<<<<<< */
+const firebaseConfig={
+  apiKey:"AIzaSyB5tP_0bVgN9lgvKbUael2vDJGIauEM0_8",
+  authDomain:"cadencia-78dfb.firebaseapp.com",
+  projectId:"cadencia-78dfb",
+  storageBucket:"cadencia-78dfb.firebasestorage.app",
+  messagingSenderId:"303083480013",
+  appId:"1:303083480013:web:9f194471b19acdbfdc1a84"
+};
+/* >>>>>>>>>>>>>>  FIM DA CONFIG  <<<<<<<<<<<<<< */
+
+const FB_VER="10.12.2";
+const FB_ENABLED=!!(firebaseConfig&&firebaseConfig.apiKey&&firebaseConfig.apiKey.indexOf("COLE")<0&&firebaseConfig.projectId);
+const fb={loaded:false,ready:false,db:null,auth:null,uid:null};
+let chalUnsub=[]; // listeners (ranking/presença) do desafio aberto
+
+/* injeta um <script> de CDN uma única vez */
+function loadScript(src){return new Promise((res,rej)=>{if([...document.scripts].some(s=>s.src===src))return res();const el=document.createElement("script");el.src=src;el.onload=()=>res();el.onerror=()=>rej(new Error("falha ao carregar "+src));document.head.appendChild(el);});}
+/* carrega o SDK compat do Firebase sob demanda (mantém o app em arquivo único) */
+async function loadFirebase(){if(fb.loaded)return;const b="https://www.gstatic.com/firebasejs/"+FB_VER+"/";await loadScript(b+"firebase-app-compat.js");await loadScript(b+"firebase-auth-compat.js");await loadScript(b+"firebase-firestore-compat.js");fb.loaded=true;}
+/* inicializa Firebase + login anônimo; tenta persistência offline. true se pronto. */
+async function ensureOnline(){if(!FB_ENABLED)return false;try{await loadFirebase();
+  if(!fb.ready){if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);fb.auth=firebase.auth();fb.db=firebase.firestore();
+    try{await fb.db.enablePersistence({synchronizeTabs:true});}catch(e){/* multi-aba/sem suporte: segue sem cache offline */}fb.ready=true;}
+  if(!fb.uid){const c=await fb.auth.signInAnonymously();fb.uid=(c&&c.user&&c.user.uid)||(fb.auth.currentUser&&fb.auth.currentUser.uid);}
+  flushOutbox();return !!fb.uid;
+ }catch(e){return false;}}
+/* nome de exibição = nome do atirador atual; se vazio, pede uma vez e guarda no perfil */
+function onlineName(){let n=profName(DB.currentProfile);if(!n||!n.trim()){n=(prompt("Seu nome para o ranking online:")||"").trim();if(n){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.name=n;save();renderProfiles();}}}return n||"Anônimo";}
+
+const CODE_CHARS="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sem 0/O/1/I para não confundir
+function newCode(){let s="";for(let i=0;i<6;i++)s+=CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)];return s;}
+/* compara dois resultados pela métrica do desafio (true se 'a' é melhor que 'b') */
+function metricBetter(a,b,m){if(m==="hf")return (a.hf||0)>(b.hf||0);if(m==="total")return (a.total||1e9)<(b.total||1e9);return (a.first==null?1e9:a.first)<(b.first==null?1e9:b.first);}
+
+/* ---- FILA OFFLINE (DB.outbox): resultado salvo local sempre; sobe quando há rede ---- */
+function queueResult(code,metric,result){DB.outbox.push({code,metric,result});save();}
+async function flushOutbox(){if(!navigator.onLine||!fb.ready||!fb.uid||!DB.outbox.length)return;
+ for(const item of DB.outbox.slice()){try{await pushResult(item.code,item.metric,Object.assign({},item.result,{uid:fb.uid}));DB.outbox=DB.outbox.filter(x=>x!==item);save();}catch(e){/* mantém na fila; tenta de novo depois */}}}
+/* grava o melhor-por-uid via transação (idempotente: reenviar não duplica) */
+async function pushResult(code,metric,r){const ref=fb.db.collection("challenges").doc(code).collection("results").doc(fb.uid);
+ await fb.db.runTransaction(async tx=>{const snap=await tx.get(ref);if(snap.exists){const cur=snap.data();if(!metricBetter(r,cur,metric))return;}tx.set(ref,r);});}
+/* envia o resultado de um desafio online (enfileira sempre; tenta subir já se houver rede) */
+async function submitOnlineResult(ch,sess){const r={uid:fb.uid||null,name:onlineName(),total:sess.total,first:sess.first,hf:sess.hf,acc:sess.acc,nShots:sess.nShots,weapon:sess.weapon,cal:sess.cal,date:sess.date,splits:sess.splits||[]};
+ queueResult(ch.code,ch.metric,r);if(await ensureOnline()){flushOutbox();setPresence(ch.code,"terminou");}}
+/* presença ao vivo (best-effort) */
+async function setPresence(code,status){if(!fb.ready||!fb.uid)return;try{await fb.db.collection("challenges").doc(code).collection("presence").doc(fb.uid).set({name:onlineName(),status,updatedAt:Date.now()});}catch(e){}}
+
+/* ---- CRIAR / ENTRAR ---- */
+async function createOnlineChallenge(name,drillId,dist,metric){if(!await ensureOnline())throw new Error("offline");
+ const d=drillById(drillId),code=newCode();
+ await fb.db.collection("challenges").doc(code).set({name,drillId,drillName:d?d.name:"",dist,metric,createdAt:Date.now(),ownerUid:fb.uid,ownerName:onlineName()});
+ const ch={id:code,code,online:true,name,drillId,drillName:d?d.name:"",dist,metric};DB.challenges.push(ch);save();return ch;}
+async function joinOnlineChallenge(code){code=(code||"").toUpperCase().trim();if(!code)return;
+ if(!await ensureOnline()){alert("Recurso online indisponível (sem rede ou Firebase desligado).");return;}
+ let snap;try{snap=await fb.db.collection("challenges").doc(code).get();}catch(e){alert("Não foi possível buscar o desafio.");return;}
+ if(!snap.exists){alert("Desafio não encontrado: "+code);return;}
+ const c=snap.data();let ch=DB.challenges.find(x=>x.id===code);
+ if(!ch){ch={id:code,code,online:true,name:c.name,drillId:c.drillId,drillName:c.drillName,dist:c.dist,metric:c.metric};DB.challenges.push(ch);save();}
+ renderChal();openChalDetail(code);}
+
+/* ---- RANKING ONLINE EM TEMPO REAL (onSnapshot) ---- */
+function detachChal(){chalUnsub.forEach(u=>{try{u();}catch(e){}});chalUnsub=[];}
+function openOnlineDetail(ch){const d=drillById(ch.drillId);$("#chalDetailTitle").textContent=ch.name;
+ const info=$("#chalInfo");info.innerHTML="";const add=(l,v)=>{const c=document.createElement("span");c.className="chip";c.innerHTML=l+" <b>"+v+"</b>";info.appendChild(c);};
+ add("Online","🌐");add("Drill",esc(d?d.name:(ch.drillName||"?")));add("Distância",fmt(ch.dist,1)+"m");add("Ranking por",ch.metric==="hf"?"hit factor":ch.metric==="total"?"menor tempo":"1º tiro");
+ $("#chalOnlineBox").classList.remove("hidden");$("#chalCode").textContent=ch.code;$("#chalPresence").textContent="";$("#chalOffline").style.display="none";
+ $("#rankList").innerHTML='<div class="empty">Carregando ranking…</div>';detachChal();
+ ensureOnline().then(ok=>{if(!ok){$("#chalOffline").style.display="";$("#rankList").innerHTML='<div class="empty">Online indisponível agora — tente com rede.</div>';return;}
+   const rRef=fb.db.collection("challenges").doc(ch.code).collection("results");
+   chalUnsub.push(rRef.onSnapshot(snap=>{$("#chalOffline").style.display=(snap.metadata.fromCache||!navigator.onLine)?"":"none";const rows=[];snap.forEach(doc=>rows.push(doc.data()));renderOnlineRank(ch,rows);},()=>{$("#rankList").innerHTML='<div class="empty">Erro ao ler o ranking.</div>';}));
+   const pRef=fb.db.collection("challenges").doc(ch.code).collection("presence");
+   chalUnsub.push(pRef.onSnapshot(snap=>{const live=[];snap.forEach(doc=>{const p=doc.data();if(p.status==="atirando"&&doc.id!==fb.uid)live.push(p.name||"Alguém");});$("#chalPresence").textContent=live.length?("🔴 "+live.join(", ")+(live.length>1?" estão atirando…":" está atirando…")):"";},()=>{}));
+ });}
+function renderOnlineRank(ch,rows){const m=ch.metric,val=s=>m==="hf"?(s.hf||0):m==="total"?(s.total||9999):(s.first==null?9999:s.first),high=m==="hf";
+ rows.sort((a,b)=>high?val(b)-val(a):val(a)-val(b));const list=$("#rankList");list.innerHTML="";
+ if(!rows.length){list.innerHTML='<div class="empty">Sem resultados ainda. Seja o primeiro!</div>';return;}
+ rows.forEach((s,i)=>{const el=document.createElement("div");el.className="rank";const medal=i===0?"🥇":i===1?"🥈":i===2?"🥉":(i+1);const me=(s.uid&&s.uid===fb.uid)?' <span class="tag">você</span>':'';el.innerHTML='<div class="pos '+(i<3?"g"+(i+1):"")+'">'+medal+'</div><div class="who"><div class="n">'+esc(s.name||"Anônimo")+me+'</div><div class="d">'+(s.date?new Date(s.date).toLocaleDateString("pt-BR"):"")+' · '+esc(((s.weapon||"")+" "+(s.cal||"")).trim())+(s.acc!=null?' · '+s.acc+'%':'')+'</div></div><div class="sc">'+(m==="hf"?fmt(s.hf||0,2):fmt(val(s),2)+"s")+'</div>';list.appendChild(el);});}
+
+/* fila sobe quando a rede volta; e ao abrir o app se houver pendências */
+window.addEventListener("online",()=>{if(FB_ENABLED)ensureOnline().then(()=>flushOutbox());});
+$$("#cfMode button").forEach(b=>b.onclick=()=>{cfMode=b.dataset.m;$$("#cfMode button").forEach(x=>x.classList.toggle("on",x===b));});
+$("#btnJoinCode").onclick=()=>{const code=prompt("Código do desafio (6 caracteres):");if(code)joinOnlineChallenge(code);};
+$("#btnCopyCode").onclick=()=>{const t=$("#chalCode").textContent;if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(()=>{$("#btnCopyCode").textContent="Copiado!";setTimeout(()=>$("#btnCopyCode").textContent="Copiar",1200);}).catch(()=>alert("Código: "+t));}else alert("Código: "+t);};
+if(FB_ENABLED&&navigator.onLine&&DB.outbox.length){ensureOnline().then(()=>flushOutbox());}
+
+/* ===== DASHBOARD ===== */
+let metricKey="hf";
+$$("#metricMode button").forEach(b=>b.onclick=()=>{metricKey=b.dataset.k;$$("#metricMode button").forEach(x=>x.classList.toggle("on",x===b));drawChart();});
+function renderDash(){const ds=$("#dashDrill"),pv=ds.value;ds.innerHTML='<option value="__all">Todos os drills</option>';DB.drills.forEach(d=>{const o=document.createElement("option");o.value=d.id;o.textContent=d.name;ds.appendChild(o);});ds.value=pv||"__all";renderProfiles();$("#dashProfile").value=$("#dashProfile").dataset.v||"__all";statsAndChart();renderSessions();}
+$("#dashDrill").onchange=()=>{statsAndChart();renderSessions();};
+$("#dashProfile").onchange=e=>{e.target.dataset.v=e.target.value;statsAndChart();renderSessions();};
+function dashSessions(){const fd=$("#dashDrill").value,fp=$("#dashProfile").value;return DB.sessions.filter(s=>(fd==="__all"||s.drillId===fd)&&(fp==="__all"||s.profileId===fp)).sort((a,b)=>new Date(a.date)-new Date(b.date));}
+function statsAndChart(){const arr=dashSessions();const sa=arr.filter(s=>s.scored!==false);const hfs=sa.map(s=>s.hf).filter(v=>v>0),firsts=arr.map(s=>s.first).filter(v=>v>0),tots=arr.map(s=>s.total).filter(v=>v>0),accs=sa.map(s=>s.acc).filter(v=>v>=0);$("#dHF").textContent=hfs.length?fmt(Math.max(...hfs),2):"—";$("#dHFavg").textContent=hfs.length?fmt(hfs.reduce((a,b)=>a+b,0)/hfs.length,2):"—";$("#dN").textContent=arr.length;$("#dFirst").textContent=firsts.length?fmt(Math.min(...firsts),2)+"s":"—";$("#dTotal").textContent=tots.length?fmt(Math.min(...tots),2)+"s":"—";$("#dAcc").textContent=accs.length?fmt(accs.reduce((a,b)=>a+b,0)/accs.length,0)+"%":"—";drawChart();drawSplitChart();}
+function metricVal(s){return metricKey==="hf"?s.hf:metricKey==="total"?s.total:(s.first||0);}
+function drawChart(){const cv=$("#chart"),arr=dashSessions().filter(s=>metricVal(s)>0);const dpr=window.devicePixelRatio||1,W=cv.clientWidth||320,H=170;cv.width=W*dpr;cv.height=H*dpr;const g=cv.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);$("#chartCap").textContent=metricKey==="hf"?"Maior é melhor":"Menor é melhor";if(arr.length<1){g.fillStyle="#6b7484";g.font="13px ui-monospace";g.textAlign="center";g.fillText("Sem dados — registre um treino.",W/2,H/2);return;}const vals=arr.map(metricVal);let mn=Math.min(...vals),mx=Math.max(...vals);if(mn===mx){mn-=mn*0.1+0.1;mx+=mx*0.1+0.1;}const pd=(mx-mn)*0.15;mn-=pd;mx+=pd;const PL=10,PR=10,PT=14,PB=18,w=W-PL-PR,h=H-PT-PB;const X=i=>arr.length===1?PL+w/2:PL+(i/(arr.length-1))*w,Y=v=>PT+h-((v-mn)/(mx-mn))*h;g.strokeStyle="#2b3140";g.lineWidth=1;for(let k=0;k<=3;k++){const y=PT+(k/3)*h;g.beginPath();g.moveTo(PL,y);g.lineTo(W-PR,y);g.stroke();}g.beginPath();arr.forEach((s,i)=>{const x=X(i),y=Y(metricVal(s));i?g.lineTo(x,y):g.moveTo(x,y);});g.strokeStyle="#e2ab5d";g.lineWidth=2.4;g.lineJoin="round";g.stroke();g.lineTo(X(arr.length-1),PT+h);g.lineTo(X(0),PT+h);g.closePath();g.fillStyle="#c790491f";g.fill();const high=metricKey==="hf",best=high?Math.max(...vals):Math.min(...vals);arr.forEach((s,i)=>{const x=X(i),y=Y(metricVal(s)),bb=metricVal(s)===best;g.beginPath();g.arc(x,y,bb?5:3.2,0,7);g.fillStyle=bb?"#57c98a":"#e2ab5d";g.fill();});}
+function drawSplitChart(){const cv=$("#splitChart"),arr=dashSessions().filter(s=>s.splits&&s.splits.length);const dpr=window.devicePixelRatio||1,W=cv.clientWidth||320,H=120;cv.width=W*dpr;cv.height=H*dpr;const g=cv.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);if(!arr.length){g.fillStyle="#6b7484";g.font="12px ui-monospace";g.textAlign="center";g.fillText("Sem splits para este filtro.",W/2,H/2);return;}let maxLen=Math.max(...arr.map(s=>s.splits.length));const avg=[];for(let i=0;i<maxLen;i++){const vs=arr.map(s=>s.splits[i]).filter(v=>v!=null);avg.push(vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:0);}const mx=Math.max(...avg,0.1),PL=10,PR=10,PT=10,PB=22,w=W-PL-PR,h=H-PT-PB,bw=w/avg.length*0.6;avg.forEach((v,i)=>{const x=PL+(i+0.5)*(w/avg.length),bh=(v/mx)*h,y=PT+h-bh;g.fillStyle="#c79049";g.fillRect(x-bw/2,y,bw,bh);g.fillStyle="#9aa3b2";g.font="10px ui-monospace";g.textAlign="center";g.fillText(fmt(v,2),x,PT+h+14);});}
+function renderSessions(){const arr=dashSessions().slice().reverse(),list=$("#histList");list.innerHTML="";if(!arr.length){list.innerHTML='<div class="empty"><div class="big">▦</div>Nenhum treino para este filtro.</div>';return;}const pool=dashSessions().filter(s=>s.scored!==false).map(s=>s.hf||0),bestHF=pool.length?Math.max(...pool):0;arr.forEach(s=>{const el=document.createElement("div");el.className="hrow";const dt=new Date(s.date),dstr=dt.toLocaleDateString("pt-BR")+" "+dt.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),pb=(s.hf>0&&s.hf===bestHF)?' <span class="pb">PB</span>':'';el.innerHTML='<div class="hf">'+fmt(s.hf,2)+'</div><div class="mid"><div class="t1">'+esc(s.drillName)+pb+(s.scored===false?' <span class="tag">não pontuado</span>':'')+'</div><div class="t2">'+dstr+' · '+esc(s.profileName)+' · '+esc(s.weapon)+' '+esc(s.cal)+' · '+fmt(s.total,2)+'s · '+s.acc+'%</div></div>';el.onclick=()=>showSession(s);list.appendChild(el);});}
+function showSession(s){const sp=s.splits&&s.splits.length?("\nSplits: "+s.splits.map(x=>fmt(x,2)).join(" · ")+" s"):"";alert(s.drillName+" — "+s.profileName+"\n"+new Date(s.date).toLocaleString("pt-BR")+"\n\nArma: "+s.weapon+" "+s.cal+" · "+fmt(s.dist,1)+"m\nTempo total: "+fmt(s.total,2)+"s"+(s.first!=null?("\n1º tiro: "+fmt(s.first,2)+"s"):"")+"\nTiros: "+s.nShots+(s.expShots>0?(" / "+s.expShots):"")+"\nAcertos: "+s.hits+"  Erros: "+s.miss+"  Precisão: "+s.acc+"%\nPontos: "+s.points+"  Hit factor: "+fmt(s.hf,2)+sp+(s.notes?("\n\nObs: "+s.notes):""));if(confirm("Apagar esta sessão?")){DB.sessions=DB.sessions.filter(x=>x.id!==s.id);save();renderDash();}}
+
+/* export/import */
+function download(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+$("#btnJSON").onclick=()=>download("cadencia_dados.json",JSON.stringify(DB,null,2),"application/json");
+$("#btnCSV").onclick=()=>{const head=["data","atirador","drill","arma","calibre","distancia_m","tempo_total_s","tempo_1o_tiro_s","tiros","esperados","acertos","erros","pontos","precisao_pct","hit_factor","tempo_corrigido_s","splits_s","desafio","bloco_id","rep","bloco_tam","observacoes"];const rows=DB.sessions.map(s=>[new Date(s.date).toLocaleString("pt-BR"),s.profileName,s.drillName,s.weapon,s.cal,s.dist,fmt(s.total,2),s.first!=null?fmt(s.first,2):"",s.nShots,s.expShots,s.hits,s.miss,s.points,s.acc,fmt(s.hf,2),s.corr?fmt(s.corr,2):"",(s.splits||[]).map(x=>fmt(x,2)).join(" "),s.challengeId?(DB.challenges.find(c=>c.id===s.challengeId)||{}).name||"":"",(s.blockId||""),(s.repIndex||""),(s.blockSize||""),(s.notes||"").replace(/[\n;]/g," ")].map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(";"));download("cadencia_treinos.csv","\uFEFF"+head.join(";")+"\n"+rows.join("\n"),"text/csv");};
+$("#btnImport").onclick=()=>$("#fileImport").click();
+$("#fileImport").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(Array.isArray(j.sessions))DB.sessions=j.sessions;if(Array.isArray(j.drills)&&j.drills.length)DB.drills=j.drills;if(Array.isArray(j.challenges))DB.challenges=j.challenges;if(Array.isArray(j.profiles)&&j.profiles.length)DB.profiles=j.profiles;if(j.currentProfile)DB.currentProfile=j.currentProfile;if(j.settings)DB.settings=Object.assign({},DEFAULT_SETTINGS,j.settings);migrateDrills(DB);save();initAll();alert("Dados importados.");}catch(err){alert("Arquivo inválido.");}};r.readAsText(f);e.target.value="";};
+
+/* settings */
+function loadSettingsUI(){const s=DB.settings;$("#cfgDlyMin").value=s.dlyMin;$("#cfgDlyMax").value=s.dlyMax;$("#cfgSound").checked=s.sound;$("#cfgVibrate").checked=s.vibrate;$("#cfgFlash").checked=s.flash;$("#cfgParBeep").checked=s.parBeep;$("#cfgWake").checked=s.wake;if($("#cfgFlashDouble"))$("#cfgFlashDouble").checked=s.flashDouble;$$("#beepVolSeg button").forEach(x=>x.classList.toggle("on",x.dataset.bv===s.beepVol));if($("#cfgBlockRest"))$("#cfgBlockRest").value=s.blockRest;$$("#blockAdvSeg button").forEach(x=>x.classList.toggle("on",x.dataset.ba===s.blockAdvance));}
+function bindCfg(id,key,num){$("#"+id)["on"+(num?"input":"change")]=e=>{DB.settings[key]=num?(+e.target.value):e.target.checked;save();refreshSetup();};}
+bindCfg("cfgDlyMin","dlyMin",1);bindCfg("cfgDlyMax","dlyMax",1);bindCfg("cfgSound","sound",0);bindCfg("cfgVibrate","vibrate",0);bindCfg("cfgFlash","flash",0);bindCfg("cfgParBeep","parBeep",0);bindCfg("cfgWake","wake",0);bindCfg("cfgFlashDouble","flashDouble",0);bindCfg("cfgBlockRest","blockRest",1);
+/* v4 (item D): seletor segmentado de volume do beep (baixo/médio/alto) */
+$$("#beepVolSeg button").forEach(b=>b.onclick=()=>{DB.settings.beepVol=b.dataset.bv;$$("#beepVolSeg button").forEach(x=>x.classList.toggle("on",x===b));save();beep();/* v5 C1: toca o preview no volume escolhido */});
+/* v5 A1: avanço entre repetições do bloco (manual/automático) */
+$$("#blockAdvSeg button").forEach(b=>b.onclick=()=>{DB.settings.blockAdvance=b.dataset.ba;$$("#blockAdvSeg button").forEach(x=>x.classList.toggle("on",x===b));save();});
+$("#btnWipe").onclick=()=>{if(confirm("Apagar TODOS os dados (treinos, desafios, atiradores, drills personalizados)?")){DB={drills:JSON.parse(JSON.stringify(DEFAULT_DRILLS)),sessions:[],challenges:[],profiles:[{id:"p0",name:"Eu"}],currentProfile:"p0",settings:Object.assign({},DEFAULT_SETTINGS)};save();initAll();}}
+
+/* re-acquire wakelock on visibility */
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&run&&run.started)reqWake();});
+
+/* init */
+function initAll(){renderProfiles();refreshSetup();loadSettingsUI();renderDrills();}
+initAll();
+if(!window.isSecureContext){$("#micBanner").classList.add("on");$("#micBanner").innerHTML="⚠ App aberto sem HTTPS: o <b>microfone não vai funcionar</b>. Hospede o arquivo para liberar a detecção de tiros.";}
+</script>
+</body>
+</html>

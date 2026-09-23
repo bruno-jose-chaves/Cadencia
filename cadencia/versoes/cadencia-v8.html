@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  CADÊNCIA v8 — REDESIGN DE UX E FRONT-END · FASE 1 DE 3 (preview)
+  ----------------------------------------------------------------------------
+  Arquivo de PREVIEW, publicado ao lado da v7 (cadencia.html continua em produção).
+  Mesmo domínio => mesmo localStorage (KEY "cadencia_v1") => lê e grava os MESMOS
+  dados, no MESMO formato da v7. Nada aqui migra ou apaga dados.
+
+  Origem do design: handoff "Redesign Cadência — UX e Front-end" (Claude Design),
+  direção 4a (menu sob demanda), tokens e cópia hifi.
+
+  MOTOR (copiado da v7 sem alteração — DETECÇÃO CONGELADA):
+    dados (load/save/migrateDrills), áudio (startMic/micFrame/beep) e detector
+    (newDetector/updateFloor/effThresh/isShot). Só a interface é nova.
+
+  FASE 1 (este arquivo): design system, navegação (menu, toast, confirmação) e
+    o fluxo de treino completo: Início, Passo 1 (drill), Passo 2 (material),
+    Timer, Descanso, Sem-tiro, Pontuação (depois de todas as reps), Resultado e
+    Relatório do bloco.
+  FASE 2: Progresso, Sessão (detalhe editável), Drills, Criar/editar drill,
+    Ajuste de captação, Permissão do mic, Modo Laboratório.
+  FASE 3: Desafios/código/ranking (online), Perfil, Config, Onboarding + tour.
+
+  Decisões de compatibilidade (design x app atual):
+    - Bloco salva 1 sessão POR REP com blockId (formato v7), não 1 sessão só.
+    - "Tempo-alvo por tiro" é exibido; o dado continua sendo o par total (d.par).
+    - Pontuação por zona IPSC tiro a tiro; grava smode:"ipsc" + zones (v7 lê).
+    - Nada de dado fictício na tela (XP, sugestões inventadas).
+  ============================================================================
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101317">
+<title>Cadência — cronômetro de tiro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ===== DESIGN TOKENS (handoff hifi) ===== */
+:root{
+  --page:#07090b; --bg:#101317; --exec:#0A0C0F;
+  --surf:#171b21; --rec:#12161b;
+  --bd:#252b33; --ctl:#2f3742; --hov:#3d4652; --track:#1c2128; --bar:#2b3138;
+  --acc:#FF7A1A; --acc-h:#ff8c38; --acc-bg:#1d1409;
+  --t1:#E8EBEF; --t2:#B9C0C8; --t3:#8A939E; --ph:#5c6672; --pend:#3a424c;
+  --ok:#3DDC91; --bad:#FF5C5C; --bad-bg:#1d1416; --bad-bd:#4a2428;
+  --fb:Barlow,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --fc:"Barlow Condensed",Barlow,system-ui,sans-serif;
+  --fm:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--page)}
+body{color:var(--t1);font:400 15px var(--fb);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+button{font-family:inherit;color:inherit}
+a{color:var(--acc)}
+input,textarea{outline:none;font-family:inherit}
+input::placeholder,textarea::placeholder{color:var(--ph)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+/* ===== CASCA: coluna fluida; rodapé colado na base; nada rola a tela inteira ===== */
+#app{position:relative;max-width:480px;margin:0 auto;height:100vh;height:100dvh;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top,0px)}
+@media (min-width:481px){#app{border-left:1px solid var(--bd);border-right:1px solid var(--bd)}}
+.scr{flex:1;display:flex;flex-direction:column;min-height:0}
+
+/* cabeçalho de 3 posições */
+.hdr{padding:16px 18px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hdr.home{padding:18px 18px 14px}
+.hb{width:44px;height:44px;flex:none;border-radius:12px;background:var(--surf);border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--t2);cursor:pointer;padding:0}
+.hdr.home .hb{width:46px;height:46px;border-radius:13px;font-size:19px}
+.hb:hover{background:#1d222a}
+.hb.me{border-color:var(--acc);color:var(--acc);font:700 12px var(--fc);letter-spacing:.06em}
+.hk{flex:1;min-width:0;text-align:center;font:700 11px var(--fc);letter-spacing:.2em;color:var(--t3);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hk.brand{font-size:12px;letter-spacing:.26em;color:var(--acc)}
+.prog{padding:0 18px 8px;display:flex;gap:6px}
+.prog i{flex:1;height:3px;border-radius:2px;background:var(--bd)}
+.prog i.on{background:var(--acc)}
+
+/* texto */
+.ttl{padding:8px 18px 10px;font:600 24px var(--fb);line-height:1.15}
+.ttl .sub{padding-top:2px}
+.sub{font:400 13.5px var(--fb);color:var(--t3);line-height:1.4}
+.lbl{font:700 11px var(--fc);letter-spacing:.18em;text-transform:uppercase;color:var(--t3)}
+.mono{font-family:var(--fm)}
+
+/* regiões */
+.body{flex:1;display:flex;flex-direction:column;gap:12px;padding:0 18px;min-height:0;overflow:auto;padding-bottom:4px}
+.foot{padding:14px 18px calc(22px + env(safe-area-inset-bottom,0px));display:flex;gap:11px}
+
+/* cartões */
+.card{background:var(--surf);border:1px solid var(--bd);border-radius:14px;padding:13px;color:var(--t1);text-align:left;width:100%;font:inherit}
+button.card,.card.click{cursor:pointer}
+button.card:hover,.card.click:hover{border-color:var(--hov)}
+.card.sel{border:1.5px solid var(--acc)}
+.card.sel:hover{border-color:var(--acc)}
+.card .nm{font:600 17px var(--fb)}
+.split{display:flex;justify-content:space-between;align-items:center;gap:12px}
+
+/* botões */
+.btn{flex:1;min-height:58px;border-radius:16px;border:1px solid var(--ctl);background:none;color:var(--t2);display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 16px;text-align:center;line-height:1.15;font:500 15px var(--fb);cursor:pointer;text-decoration:none}
+.btn:hover{border-color:var(--hov)}
+.btn.p{background:var(--acc);border-color:var(--acc);color:#101317;font:600 17px var(--fb)}
+.btn.p:hover{background:var(--acc-h);border-color:var(--acc-h)}
+.btn.big{min-height:68px;border-radius:18px}
+.btn.cta{font:700 16px var(--fc);letter-spacing:.18em}
+.btn.sq{flex:none;width:60px;font-size:20px}
+.btn.x{flex:1.6}
+.btn.danger{border-color:var(--bad-bd);color:var(--bad)}
+.btn.bad{background:var(--bad);border-color:var(--bad);color:#101317;font:600 16px var(--fb)}
+.btn.none{flex:none}
+.link{background:none;border:0;padding:6px 0;text-align:left;font:500 14px var(--fb);color:var(--acc);cursor:pointer;align-self:flex-start}
+.dash{border:1px dashed var(--ctl);border-radius:14px;padding:13px;text-align:center;font:500 14px var(--fb);color:var(--t2);background:none;cursor:pointer;width:100%}
+
+/* chips de filtro */
+.chips{display:flex;gap:7px;flex-wrap:wrap;padding:0 18px 12px}
+.chip{min-height:40px;border-radius:99px;padding:0 14px;border:1px solid var(--ctl);background:none;color:var(--t3);font:500 12px var(--fc);letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.chip.on{background:var(--acc);border-color:var(--acc);color:#101317}
+
+/* grades de opção (arma / calibre) */
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;padding-top:9px}
+.opt{min-height:44px;border-radius:10px;padding:0 3px;border:1px solid var(--ctl);background:none;color:var(--t2);font:500 13.5px var(--fb);cursor:pointer}
+.opt.m{font-family:var(--fm)}
+.opt.on{background:var(--acc);border-color:var(--acc);color:#101317}
+.opt.add{border:1px dashed var(--hov);font:500 13px var(--fb)}
+.inp{flex:1;min-width:0;background:var(--bg);border:1.5px solid var(--acc);border-radius:10px;padding:11px 12px;font:500 14px var(--fm);color:var(--t1)}
+
+/* stepper */
+.stp{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:9px}
+.sb{width:44px;height:44px;flex:none;border:1px solid var(--ctl);border-radius:10px;background:none;color:var(--t2);font-size:18px;cursor:pointer}
+.num{font:700 21px var(--fm);text-align:center;white-space:nowrap}
+
+/* toggle 48x28 */
+.tg{width:48px;height:28px;flex:none;border-radius:99px;display:flex;align-items:center;padding:0 3px;background:var(--bd);justify-content:flex-start}
+.tg i{width:22px;height:22px;border-radius:50%;background:var(--t3)}
+.tg.on{background:var(--acc);justify-content:flex-end}
+.tg.on i{background:#101317}
+
+/* KPIs */
+.kpis{display:flex;gap:9px;padding:0 18px 13px}
+.kpi{flex:1;background:var(--surf);border:1px solid var(--bd);border-radius:13px;padding:12px 6px;text-align:center;min-width:0}
+.kpi b{display:block;font:700 22px var(--fm)}
+.kpi span{font:700 9.5px var(--fc);letter-spacing:.15em;color:var(--t3);text-transform:uppercase}
+.kpi.acc{background:var(--acc-bg);border-color:var(--acc)}
+.kpi.acc b,.kpi.acc span{color:var(--acc)}
+.kpi b span{font:inherit;letter-spacing:normal;text-transform:none;color:inherit} /* valores com cor própria dentro do KPI */
+
+/* telas de execução (timer / descanso / sem tiro): legíveis a ~2 m */
+.exec{background:var(--exec);padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));gap:18px;position:relative}
+.topline{display:flex;justify-content:space-between;align-items:center;gap:10px;font:700 12px var(--fc);letter-spacing:.18em;text-transform:uppercase;color:var(--t3)}
+.topline span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ring{align-self:center;width:238px;height:238px;flex:none;border:6px solid var(--track);border-top-color:var(--acc);border-right-color:var(--acc);border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:10px}
+.ring.rest{width:218px;height:218px;border-right-color:var(--track);margin-top:16px}
+.clk{font:700 54px var(--fm);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.big70{font:700 70px var(--fm);color:var(--acc);font-variant-numeric:tabular-nums}
+.rl{font:700 11px var(--fc);letter-spacing:.2em;text-transform:uppercase;color:var(--t3)}
+.rows{display:flex;flex-direction:column;gap:8px;padding-top:11px;font:400 13px var(--fm)}
+.row{display:flex;align-items:center;gap:9px}
+.row .n{width:18px;flex:none;color:var(--t3)}
+.bar{height:11px;border-radius:2px;background:var(--acc);flex:none}
+.bar.tall{height:15px;border-radius:3px}
+.bar.miss{background:var(--bad)}
+.bar.pend{background:repeating-linear-gradient(90deg,var(--pend) 0 5px,transparent 5px 8px)}
+.ztag{border-radius:5px;padding:1px 7px;border:1px solid var(--ctl);color:var(--t2)}
+.ztag.miss{border-color:var(--bad-bd);color:var(--bad)}
+.warn{background:var(--bad-bg);border:1px solid var(--bad-bd);color:var(--bad);border-radius:12px;padding:9px 12px;font:600 13.5px var(--fb);text-align:center}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:5}
+.flash.go{animation:flashwhite .5s ease-out}
+.flash.go2{animation:flashwhite .5s ease-out 2}
+@keyframes flashwhite{0%,100%{opacity:0}40%{opacity:.9}}
+
+/* pontuação */
+.shotchips{padding:0 18px 14px;display:flex;flex-wrap:wrap;gap:6px}
+.sc{flex:1 0 30px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:700 13px var(--fm);border:1px solid var(--bd);color:var(--t3)}
+.sc.done{background:var(--acc);border-color:var(--acc);color:#101317}
+.sc.miss{background:var(--bad-bg);border-color:var(--bad-bd);color:var(--bad)}
+.sc.cur{border-color:var(--t1);color:var(--t1)}
+.zones{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 18px 14px;min-height:0}
+.zb{border-radius:16px;border:1px solid var(--ctl);background:var(--surf);color:var(--t1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;min-height:96px}
+.zb:hover,.zb:active{filter:brightness(1.25)}
+.zb b{font:700 38px var(--fm)}
+.zb span{font:700 12px var(--fc);letter-spacing:.14em}
+.zb.miss{background:var(--bad-bg);border-color:var(--bad-bd);color:var(--bad)}
+.tally{display:flex;gap:7px;padding-top:10px;font:700 14px var(--fm)}
+.tally span{flex:1;border-radius:9px;padding:9px 0;text-align:center;border:1px solid var(--bd);color:var(--t3)}
+.tally span.on{background:var(--acc);border-color:var(--acc);color:#101317}
+.tally span.on.miss{background:var(--bad-bg);border-color:var(--bad-bd);color:var(--bad)}
+
+/* tabela */
+.tbl{margin:0 18px 13px;background:var(--surf);border:1px solid var(--bd);border-radius:14px;overflow:hidden;flex:none}
+.tr{display:flex;padding:11px 14px;border-bottom:1px solid var(--track);align-items:baseline}
+.tr:last-child{border-bottom:0}
+.tr>span{flex:1;text-align:right;font:400 13.5px var(--fm)}
+.tr>span:first-child{text-align:left;font:500 14px var(--fb)}
+.tr.h{padding:10px 14px;background:var(--rec);border-bottom:1px solid var(--bd)}
+.tr.h>span{font:700 9.5px var(--fc);letter-spacing:.14em;text-transform:uppercase;color:var(--t3)}
+.note{margin:0 18px 13px;background:var(--rec);border-left:2px solid var(--acc);border-radius:0 12px 12px 0;padding:12px 14px;font:400 13.5px var(--fb);color:var(--t2);line-height:1.45}
+.empty{border:1px dashed var(--ctl);border-radius:14px;padding:18px;text-align:center;font:400 14px var(--fb);color:var(--t3)}
+
+/* folhas inferiores (menu, confirmação) */
+.ovl{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:flex-end}
+.scrim{position:absolute;inset:0;background:rgba(6,8,10,.74);border:0;padding:0;cursor:pointer}
+.sheet{position:relative;background:var(--rec);border-top:1px solid var(--bd);border-radius:22px 22px 0 0;padding:14px 18px calc(22px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px}
+.grab{width:44px;height:4px;background:var(--ctl);border-radius:2px;align-self:center}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.mi{height:78px;background:var(--surf);border:1px solid var(--bd);border-radius:15px;padding:13px;display:flex;flex-direction:column;justify-content:space-between;text-align:left;cursor:pointer}
+.mi.on{border-color:var(--acc)}
+.mi .ic{font-size:18px;color:var(--t3)}
+.mi.on .ic{color:var(--acc)}
+.mi .nm{font:600 16px var(--fb);color:var(--t1)}
+.mi .mt{font:400 12px var(--fb);color:var(--t3)}
+.mi .mt.late{color:var(--bad)}
+.toast{position:absolute;left:18px;right:18px;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--t1);color:#101317;border-radius:13px;padding:14px 16px;font:500 14.5px var(--fb);text-align:center;animation:toastin .18s ease-out}
+@keyframes toastin{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.flash.go,.flash.go2{animation:none}.toast{animation:none}}
+</style>
+</head>
+<body>
+<div id="app" aria-live="off"></div>
+<script>
+"use strict";
+/* =============================================================================
+   MOTOR — copiado da v7 SEM ALTERAÇÃO (dados, migração, áudio, detector).
+   DETECÇÃO CONGELADA: isShot / effThresh / updateFloor / micFrame idênticos.
+   ============================================================================= */
+const KEY="cadencia_v1";
+const DEFAULT_DRILLS=[
+ {id:"saque",builtin:1,name:"Saque e 1 disparo",desc:"Tempo de saque até o 1º tiro.",shots:1,dist:7,par:1.5,pen:0,tag:"velocidade"},
+ {id:"moz",builtin:1,name:"Mozambique",desc:"2 tiros no peito + 1 na cabeça.",shots:3,dist:7,par:3.0,pen:0,tag:"velocidade"},
+ {id:"failure",builtin:1,name:"Failure to Stop",desc:"Variante do Mozambique com foco na precisão da cabeça.",shots:3,dist:7,par:3.5,pen:0,tag:"precisão"},
+ {id:"bill",builtin:1,name:"Bill Drill",desc:"6 tiros no centro, o mais rápido possível mantendo o acerto.",shots:6,dist:7,par:2.0,pen:0,tag:"velocidade"},
+ {id:"triple5",builtin:1,name:"Triple Nickel (5-5-5)",desc:'5 tiros em alvo de 5" a ~5m, par de 5s.',shots:5,dist:4.5,par:5.0,pen:0,tag:"precisão"},
+ {id:"r1r2",builtin:1,name:"Recarga 1-R-2",desc:"1 tiro, recarga de emergência (slide-lock), 2 tiros. Mag com 1 munição + mag cheio.",shots:3,dist:7,par:4.5,pen:0,tag:"recarga"},
+ {id:"rockreload",builtin:1,name:"Rock the Reload",desc:"1 tiro, troca de carregador, 1 tiro. Dois mags com 1 munição cada.",shots:2,dist:5,par:4.0,pen:0,tag:"recarga"},
+ {id:"cock",builtin:1,name:"Engatilha e dispara",desc:"Revólver em ação simples: engatilhar manualmente e disparar com precisão.",shots:2,dist:10,par:4.0,pen:0,tag:"precisão"},
+ {id:"malf",builtin:1,name:"Limpa pane e dispara",desc:"Com munição inerte no mag: dispara, encontra a pane, faz tap-rack e volta a atirar.",shots:2,dist:7,par:4.0,pen:0,tag:"recarga"},
+ {id:"fast",builtin:1,name:"FAST Drill",desc:'2 na cabeça (cartão 3x5"), recarga, 4 no corpo (círculo 8"). A 7m.',shots:6,dist:7,par:7.0,pen:0,tag:"recarga"},
+ {id:"elpres",builtin:1,name:"El Presidente",desc:"De costas: gira, saca, 2 tiros em cada um dos 3 alvos, recarrega, repete.",shots:12,dist:10,par:10.0,pen:0,tag:"recarga"},
+ {id:"casino",builtin:1,name:"Casino Drill",desc:"1 tiro no alvo 1, 2 no 2… até 6 no 6. 21 tiros, 2 recargas. +1s por erro.",shots:21,dist:4.5,par:21.0,pen:1,tag:"recarga"},
+ {id:"dot",builtin:1,name:"Dot Torture",desc:"50 tiros de precisão em alvos pequenos. Sem pressa, sem erro.",shots:50,dist:3,par:0,pen:0,tag:"precisão"},
+ {id:"doubletap",builtin:1,name:"Par Controlado",desc:"2 tiros rápidos no centro, controlando o recuo entre eles.",shots:2,dist:7,par:1.2,pen:0,tag:"velocidade"},
+ {id:"r1r1",builtin:1,name:"1-Reload-1",desc:"1 tiro, recarga de velocidade, 1 tiro. Carregador com 1 munição + carregador cheio.",shots:2,dist:7,par:4.0,pen:0,tag:"recarga"},
+ {id:"group5",builtin:1,name:"Grupamento (5 tiros)",desc:"5 tiros sem pressa; foco em fechar o menor grupo possível.",shots:5,dist:7,par:0,pen:0,tag:"precisão"},
+ {id:"type3",builtin:1,name:"Pane Tipo 3 — Alimentação Dupla",desc:"Monte com munição inerte na câmara + carregador cheio. Ao travar: trava o ferrolho atrás, remove o carregador, racka 3×, recarrega e racka, e volta a atirar.",shots:2,dist:7,par:6.0,pen:0,tag:"recarga",target:'Silhueta IPSC (A/C/D)'},
+ {id:"balldummy",builtin:1,name:"Bola e Manequim",desc:"Intercale munição inerte aleatória no carregador. Treina a ação imediata (tap-rack) sem saber quando vem a pane e expõe a antecipação do disparo (flinch).",shots:0,dist:7,par:0,pen:0,tag:"recarga",target:'Silhueta IPSC (A/C/D)'},
+ {id:"livre",builtin:1,name:"Treino livre",desc:"Conta os tiros que vierem, sem número fixo.",shots:0,dist:7,par:0,pen:0,tag:"livre"}
+];
+const DEFAULT_SETTINGS={dlyMin:1.5,dlyMax:4,sound:true,vibrate:true,flash:true,parBeep:true,wake:true,mic:true,sens:55,requireClip:false,audioDeviceId:"",beepVol:"alto",flashDouble:false,blockAdvance:"manual",blockRest:5,echoBlank:150,lab:false,lastExport:0,dry:false};
+function load(){let db;try{db=JSON.parse(localStorage.getItem(KEY));}catch(e){db=null;}if(!db||typeof db!=="object")db={};
+ if(!Array.isArray(db.drills)||!db.drills.length)db.drills=JSON.parse(JSON.stringify(DEFAULT_DRILLS));
+ if(!Array.isArray(db.sessions))db.sessions=[];
+ if(!Array.isArray(db.challenges))db.challenges=[];
+ if(!Array.isArray(db.outbox))db.outbox=[]; // v5 online: fila de resultados a subir quando houver rede
+ if(!Array.isArray(db.profiles)||!db.profiles.length)db.profiles=[{id:"p0",name:"Eu"}];
+ if(!db.currentProfile)db.currentProfile=db.profiles[0].id;
+ db.settings=Object.assign({},DEFAULT_SETTINGS,db.settings||{});return db;}
+let DB=load(), MEM_ONLY=false;
+function save(){try{localStorage.setItem(KEY,JSON.stringify(DB));}catch(e){MEM_ONLY=true;}}
+/* ===== MIGRAÇÃO DE DRILLS (v4, item B) =====
+   Conserta a categorização das abas:
+   1) adiciona drills de fábrica que faltarem (por id);
+   2) re-sincroniza a tag dos drills builtin pelo mapa canônico (= DEFAULT_DRILLS,
+      por id) SEM tocar em nome/desc/params que o usuário tenha editado;
+   3) marca como "livre" qualquer drill personalizado sem tag.
+   É idempotente (rodar de novo não muda nada). Retorna true se algo mudou. */
+/* v5 E3: alvo recomendado padrão dos drills de fábrica (preenchido na migração). */
+const TARGET_MAP={saque:'Silhueta IPSC (A/C/D)',moz:'Silhueta IPSC (A/C/D)',failure:'Silhueta IPSC (cabeça)',bill:'Silhueta IPSC (zona A)',triple5:'Alvo de 5" / Bullseye',r1r2:'Silhueta IPSC (A/C/D)',rockreload:'Silhueta IPSC (A/C/D)',cock:'Bullseye / B8',malf:'Silhueta IPSC (A/C/D)',fast:'Cartão 3x5" + círculo 8"',elpres:'Silhueta IPSC (A/C/D) (3 alvos)',casino:'Silhueta IPSC (6 alvos)',dot:'Alvo de pontos (Dot Torture)',doubletap:'Silhueta IPSC (zona A)',r1r1:'Silhueta IPSC (A/C/D)',group5:'Bullseye / B8',type3:'Silhueta IPSC (A/C/D)',balldummy:'Silhueta IPSC (A/C/D)'};
+function migrateDrills(db){let changed=false;const canon={};DEFAULT_DRILLS.forEach(d=>canon[d.id]=d);
+ DEFAULT_DRILLS.forEach(d=>{if(!db.drills.some(x=>x.id===d.id)){db.drills.push(JSON.parse(JSON.stringify(d)));changed=true;}});
+ db.drills.forEach(d=>{
+   // tag: builtin re-sincroniza pelo mapa canônico, MAS v5 B3: não toca se o usuário escolheu (userTag)
+   if(d.builtin&&canon[d.id]){if(d.userTag!==true&&d.tag!==canon[d.id].tag){d.tag=canon[d.id].tag;changed=true;}}
+   else if(!d.tag){d.tag="livre";changed=true;}
+   // v5 E3: preenche o alvo recomendado dos builtin que ainda não têm (sem sobrescrever)
+   if(d.builtin&&!d.target&&TARGET_MAP[d.id]){d.target=TARGET_MAP[d.id];changed=true;}
+ });
+ return changed;}
+if(migrateDrills(DB))save(); // aplica a migração ao abrir o app (preserva dados existentes)
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const fmt=(n,d=2)=>Number(n).toFixed(d).replace(".",",");
+const drillById=id=>DB.drills.find(d=>d.id===id);
+const profName=id=>{const p=DB.profiles.find(x=>x.id===id);return p?p.name:"?";};
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+/* ===== AUDIO + MIC ===== */
+/* v3: detecção adaptativa de transiente.
+   - getFloatTimeDomainData (resolução real, sem 8-bit).
+   - mede PICO + RMS + fração de amostras "no teto" (clip) por quadro.
+   - o gatilho compara o pico contra um PISO de ruído aprendido (EWMA),
+     exigindo uma margem em dB. O slider só ajusta essa margem.
+   - guarda de eco: após um tiro, o nível-guarda decai e segura a cauda/reverberação. */
+let AC=null,analyser=null,micStream=null,micBuf=null,micProc=null;
+function ensureAC(){if(!AC)AC=new(window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended")AC.resume();return AC;}
+/* v4 (item D): beep redesenhado — dois osciladores (1000+1500 Hz, onda quadrada),
+   ~0,22s, ataque rápido + decaimento exponencial. O ganho final vem do setting
+   beepVol (baixo/médio/alto -> 0,5/0,75/1,0). O beep de fim de par usa o mesmo. */
+function beepGain(){return ({baixo:0.5,medio:0.75,alto:1.0})[DB.settings.beepVol]||1.0;}
+function beep(dur=0.22){if(!DB.settings.sound)return;try{const ac=ensureAC(),g=ac.createGain(),vol=beepGain(),t=ac.currentTime;[1000,1500].forEach(f=>{const o=ac.createOscillator();o.type="square";o.frequency.value=f;o.connect(g);o.start();o.stop(t+dur+0.02);});g.connect(ac.destination);g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol*0.5,t+0.005);/* v6 D1: /2 p/ os 2 osciladores não saturarem — senão médio/alto saíam iguais */g.gain.exponentialRampToValueAtTime(0.001,t+dur);}catch(e){}}
+async function startMic(deviceId){try{const ac=ensureAC();const audio={echoCancellation:{ideal:false},noiseSuppression:{ideal:false},autoGainControl:{ideal:false}};if(deviceId)audio.deviceId={exact:deviceId};micStream=await navigator.mediaDevices.getUserMedia({audio});const src=ac.createMediaStreamSource(micStream);analyser=ac.createAnalyser();analyser.fftSize=2048;micBuf=new Float32Array(analyser.fftSize);src.connect(analyser);
+  // tenta ler o que o aparelho REALMENTE aplicou (alguns ignoram os pedidos)
+  try{micProc=micStream.getAudioTracks()[0].getSettings();}catch(e){micProc=null;}
+  return true;}catch(e){return false;}}
+function stopMic(){if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}analyser=null;micProc=null;}
+const DISP=1.0, CLIP_LVL=0.985; // DISP: barra em fração de escala plena; CLIP_LVL: amostra "no teto"
+/* lê um quadro e devolve pico, rms e fração clipada */
+function micFrame(){if(!analyser)return{peak:0,rms:0,clip:0};analyser.getFloatTimeDomainData(micBuf);let pk=0,sum=0,cl=0;const N=micBuf.length;for(let i=0;i<N;i++){const v=micBuf[i],a=v<0?-v:v;if(a>pk)pk=a;sum+=v*v;if(a>=CLIP_LVL)cl++;}return{peak:pk,rms:Math.sqrt(sum/N),clip:cl/N};}
+/* margem do slider: sens 99 -> +6 dB (fácil); sens 1 -> +30 dB (rígido) */
+function marginDb(s){s=Math.max(1,Math.min(99,s));return 6+(99-s)/98*24;}
+function marginFactor(s){return Math.pow(10,marginDb(s)/20);}
+/* estado adaptativo compartilhado entre calibração e treino */
+function newDetector(){return{floor:0,guard:0,lastT:-999,warm:8,wmin:9,rearmed:true};}
+const ABS_GATE=0.015;      // pico mínimo absoluto pra cogitar um tiro (mata silêncio)
+const GUARD_DECAY=0.90;    // decaimento do nível-guarda por quadro (~120 ms p/ cair à metade)
+const GUARD_REARM=0.66;    // novo tiro precisa bater 66% do guarda que ainda decai
+/* v7 F1: MIN_SPLIT_S removido — o refratário virou a janela anti-eco (echoBlank) na v6. */
+/* atualiza o piso de ruído. Warm-up (~130ms) semeia com o mínimo, evitando falso
+   positivo quando o ambiente já começa barulhento (ex.: aparelho com ganho quente). */
+function updateFloor(det,peak){
+  if(det.warm>0){det.wmin=Math.min(det.wmin,peak);det.warm--;if(det.warm===0)det.floor=Math.max(det.wmin,0.004);return;}
+  if(peak<det.floor*4){det.floor=det.floor*0.93+peak*0.07;}   // ambiente: segue rápido
+  else{det.floor=det.floor*0.998+peak*0.002;}                  // transiente (tiro): quase congela
+  if(det.floor<0.003)det.floor=0.003;
+}
+function effThresh(det,sens){return Math.min(0.93,Math.max(det.floor*marginFactor(sens),det.guard*GUARD_REARM));}
+/* decide se o quadro atual é um tiro; nowS = tempo em segundos da referência atual */
+/* v6 (item B): re-armar por JANELA ANTI-ECO — substitui o refratário fixo de 90ms.
+   Só conta o próximo tiro quando (a) passou mais que echoBlank ms desde o último E
+   (b) o nível voltou perto do piso (peak < floor×2) ao menos uma vez desde então —
+   prova de que o som decaiu. Mantém o gate absoluto (ABS_GATE) e a lógica de clip. */
+function isShot(det,fr,sens,nowS,requireClip){det.guard*=GUARD_DECAY;const gUsed=det.guard;/* v7 B5: guarda efetivo (decaído) que o effThresh consome */const warming=det.warm>0;const th=effThresh(det,sens);const blank=(DB.settings.echoBlank||150)/1000;if(fr.peak<det.floor*2)det.rearmed=true;const ok=!warming&&fr.peak>=ABS_GATE&&fr.peak>=th&&(nowS-det.lastT)>blank&&det.rearmed!==false&&(!requireClip||fr.clip>0.0015);updateFloor(det,fr.peak);if(ok){det.lastT=nowS;det.guard=fr.peak;det.rearmed=false;}det.lastDec={thresh:th,guard:gUsed};/* v7 B5: registro do que foi REALMENTE usado (não altera a decisão) */return ok;}
+
+async function reqWake(){if(DB.settings.wake&&"wakeLock"in navigator){try{wakeLock=await navigator.wakeLock.request("screen");}catch(e){}}}
+function relWake(){if(wakeLock){wakeLock.release().catch(()=>{});wakeLock=null;}}
+
+/* =============================================================================
+   INTERFACE v8 — redesign (fase 1). Tudo abaixo é novo; o motor acima não muda.
+   Modelo: estado simples (S = navegação/preparo, T = treino em andamento),
+   render() reconstrói a tela atual a partir do estado; ações via data-a
+   (delegação de eventos). O timer NÃO re-renderiza a cada quadro: só pinta os
+   pedaços que mudam (relógio, splits, fase) para não pesar no loop do microfone.
+   ============================================================================= */
+let wakeLock=null;
+
+/* ---------- catálogos do design ---------- */
+const CATS=[{k:"all",l:"Todos"},{k:"velocidade",l:"Veloc."},{k:"precisão",l:"Precisão"},{k:"recarga",l:"Recarga"},{k:"livre",l:"Livre"}];
+const GUNS=["Pistola","Revólver","Carabina","Espingarda","Fuzil","Rifle"];
+const CAL_BY_GUN={
+  "Pistola":["9mm",".380",".40",".45","9x21"],
+  "Revólver":[".38 SPL",".357 Mag",".44 Mag",".32"],
+  "Carabina":["9mm",".40",".45",".357 Mag"],
+  "Espingarda":["CAL 12","CAL 16","CAL 20",".410"],
+  "Fuzil":["5.56",".223","7.62",".308","300 BLK"],
+  "Rifle":[".22 LR",".22 Mag",".308",".30-06"]
+};
+const ZPTS={A:5,C:3,D:1,M:-10};
+
+/* calibres de uma arma = lista do design + os que o usuário adicionou (settings.customCals) */
+function calsFor(g){const base=CAL_BY_GUN[g]||CAL_BY_GUN.Pistola;const extra=((DB.settings.customCals||{})[g])||[];return base.concat(extra.filter(c=>base.indexOf(c)<0));}
+/* garante arma/calibre válidos no preparo (calibre salvo fora da lista cai no 1º) */
+function ensureGear(){const s=DB.settings;if(GUNS.indexOf(s.gun)<0)s.gun="Pistola";if(calsFor(s.gun).indexOf(s.cal)<0)s.cal=calsFor(s.gun)[0];}
+
+/* ---------- formatação ---------- */
+const plural=(n,a,b)=>n+" "+(n===1?a:b);
+/* distância: inteiro sem casas; fracionário com 1 casa e vírgula */
+const fnum=n=>{n=+n||0;return Number.isInteger(n)?String(n):fmt(n,1);};
+const dash="—";
+
+/* ---------- estado ---------- */
+const S={screen:"home",menu:false,ask:null,toast:"",filter:"all",selId:null,dist:7,reps:1,rest:5,showAddCal:false};
+let T=null;      // treino em andamento (bloco de N reps)
+let run=null;    // repetição em execução (ligada ao detector)
+let restTimer=null,restPaused=false,toastTimer=null;
+
+function lastSession(){let best=null;DB.sessions.forEach(s=>{if(!best||new Date(s.date)>new Date(best.date))best=s;});return best;}
+function selDrill(){return drillById(S.selId);}
+function drillMeta(d){const shots=d.shots>0?plural(d.shots,"tiro","tiros"):"tiros livres";const tgt=(d.par>0&&d.shots>0)?"alvo "+fmt(d.par/d.shots,2)+" s/tiro":(d.par>0?"par "+fmt(d.par,2)+" s":"sem alvo de tempo");return shots+" · "+fnum(d.dist)+" m · "+tgt;}
+function parLine(d){return (d.par>0&&d.shots>0)?"alvo "+fmt(d.par/d.shots,2)+" s por tiro":(d.par>0?"par "+fmt(d.par,2)+" s":"sem alvo de tempo");}
+function bestHfFor(drillId){let b=0;DB.sessions.forEach(s=>{if(s.drillId===drillId&&s.scored!==false&&s.hf>b)b=s.hf;});return b;}
+function daysSinceExport(){const t=DB.settings.lastExport;return t?Math.floor((Date.now()-t)/864e5):null;}
+function backupLate(){if(!DB.sessions.length)return false;const d=daysSinceExport();return d===null||d>30;}
+/* dias seguidos com treino, contando de hoje (ou de ontem, se ainda não treinou hoje) */
+function streak(){const days=new Set(DB.sessions.map(s=>new Date(s.date).toDateString()));const d=new Date();if(!days.has(d.toDateString()))d.setDate(d.getDate()-1);let n=0;while(days.has(d.toDateString())){n++;d.setDate(d.getDate()-1);}return n;}
+function userName(){const n=profName(DB.currentProfile);return (n&&n!=="?"&&n!=="Eu")?n:"";}
+function initials(){const n=userName();if(!n)return "EU";const p=n.trim().split(/\s+/);return ((p[0][0]||"")+(p.length>1?p[p.length-1][0]:(p[0][1]||""))).toUpperCase();}
+
+/* ---------- pedaços de UI reutilizáveis ---------- */
+const B={
+  menu:'<button class="hb" data-a="menu" aria-label="Abrir menu">☰</button>',
+  home:'<button class="hb" data-a="go" data-v="home" aria-label="Ir para o início">⌂</button>',
+  back:(to,label)=>'<button class="hb" data-a="go" data-v="'+to+'" aria-label="'+(label||"Voltar")+'">‹</button>',
+  close:(act)=>'<button class="hb" data-a="'+act+'" aria-label="Fechar">✕</button>'
+};
+const hdr=(l,label,r,cls)=>'<div class="hdr'+(cls?" "+cls:"")+'">'+l+'<div class="hk'+(cls==="home"?" brand":"")+'">'+label+'</div>'+r+'</div>';
+const prog=n=>'<div class="prog" aria-label="Passo '+n+' de 3">'+[1,2,3].map(i=>'<i class="'+(i<=n?"on":"")+'"></i>').join("")+'</div>';
+const kpi=(v,l,acc,color)=>'<div class="kpi'+(acc?" acc":"")+'"><b'+(color?' style="color:'+color+'"':'')+'>'+v+'</b><span>'+l+'</span></div>';
+const stepper=(act,val,label)=>'<div class="stp"><button class="sb" data-a="'+act+'" data-v="-1" aria-label="Diminuir '+label+'">−</button><div class="num">'+val+'</div><button class="sb" data-a="'+act+'" data-v="1" aria-label="Aumentar '+label+'">+</button></div>';
+
+/* =============================================================================
+   TELAS
+   ============================================================================= */
+const SCREENS={};
+
+/* 1. INÍCIO — retomar em um toque + o que merece atenção hoje */
+SCREENS.home=()=>{
+  const h=new Date().getHours(),greet=h<12?"Bom dia":h<18?"Boa tarde":"Boa noite",nm=userName();
+  const n=DB.sessions.length,st=streak();
+  const line=n?((st?(st===1?"1 dia seguido":st+" dias seguidos")+" · ":"")+plural(n,"sessão","sessões")):"Nenhum treino ainda";
+  const last=lastSession();let resume;
+  if(last&&drillById(last.drillId)){
+    const reps=last.blockSize||1,b=bestHfFor(last.drillId);
+    resume='<button class="card click" data-a="resume" style="margin:0 18px 16px;width:auto;border:1.5px solid var(--acc);border-radius:16px;padding:16px"><div class="lbl" style="color:var(--acc)">Retomar</div>'
+      +'<div class="split" style="padding-top:6px"><div style="min-width:0"><div style="font:600 20px var(--fb)">'+esc(last.drillName)+'</div><div class="sub" style="font-size:14px">'+esc(last.cal||"")+' · '+fnum(last.dist)+' m · '+plural(reps,"rep","reps")+'</div></div>'
+      +'<div style="text-align:right;flex:none"><div class="mono" style="font-weight:700;font-size:21px;color:var(--acc)">'+(b>0?fmt(b,2):dash)+'</div><div class="lbl" style="font-size:10px;letter-spacing:.14em">Melhor HF</div></div></div></button>';
+  }else{
+    resume='<button class="card click" data-a="flow" style="margin:0 18px 16px;width:auto;border:1.5px solid var(--acc);border-radius:16px;padding:16px"><div class="lbl" style="color:var(--acc)">Primeiro treino</div><div style="font:600 20px var(--fb);padding-top:6px">Escolha um drill</div><div class="sub" style="font-size:14px">leva menos de um minuto para começar</div></button>';
+  }
+  /* sugestões: só o que é real (desafio mais recente, backup) */
+  let sug="";const ch=DB.challenges[DB.challenges.length-1];
+  if(ch)sug+='<button class="card click" data-a="go" data-v="challenges" style="border-radius:16px;padding:15px"><div class="nm">'+esc(ch.name)+'</div><div class="sub" style="font-size:14px">desafio '+(ch.online?"online":"local")+' · '+esc(ch.drillName||(drillById(ch.drillId)||{}).name||"")+'</div></button>';
+  if(n){const late=backupLate(),d=daysSinceExport();
+    sug+='<button class="card click split" data-a="backup" style="border-radius:16px;padding:15px"><div><div class="nm">Backup</div><div class="sub" style="font-size:14px;color:'+(late?"var(--bad)":"var(--ok)")+'">'+(d===null?"nenhum backup feito ainda":d===0?"backup feito hoje":late?d+" dias sem exportar":"último há "+plural(d,"dia","dias"))+'</div></div><span style="font:500 14px var(--fb);color:var(--acc)">Exportar</span></button>';}
+  return '<div class="scr">'+hdr(B.menu,"CADÊNCIA",'<button class="hb me" data-a="go" data-v="profile" aria-label="Perfil">'+initials()+'</button>',"home")
+    +'<div style="padding:0 18px 16px"><div style="font:600 27px var(--fb);line-height:1.1">'+greet+(nm?", "+esc(nm):"")+'</div><div class="sub" style="font-size:14px">'+line+'</div></div>'
+    +resume
+    +(sug?'<div class="lbl" style="padding:0 18px 9px">Sugerido para hoje</div><div class="body" style="gap:11px">'+sug+'</div>':'<div style="flex:1"></div>')
+    +'<div class="foot" style="padding-top:16px"><button class="btn p big cta" data-a="flow"><span style="font-size:24px;line-height:1">⌖</span>INICIAR TREINO</button></div></div>';
+};
+
+/* 2. PASSO 1 — escolher o drill (só o selecionado expande com "como executar") */
+SCREENS.step1=()=>{
+  const list=DB.drills.filter(d=>S.filter==="all"||d.tag===S.filter);
+  if(!selDrill())S.selId=(DB.drills[0]||{}).id;
+  const cards=list.map(d=>{const on=d.id===S.selId;
+    return '<button class="card'+(on?" sel":"")+'" data-a="pick" data-v="'+esc(d.id)+'" aria-pressed="'+on+'" style="padding:14px"><div style="display:flex;align-items:center;gap:12px">'
+      +'<span style="width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;border:1.5px solid '+(on?"var(--acc)":"var(--hov)")+';background:'+(on?"var(--acc)":"none")+';color:#101317;font:700 12px var(--fb)">'+(on?"✓":"")+'</span>'
+      +'<span style="flex:1;min-width:0"><span class="nm" style="display:block">'+esc(d.name)+'</span><span class="sub" style="font-size:13px;display:block">'+drillMeta(d)+'</span></span></div>'
+      +(on&&(d.desc||d.target)?'<div style="border-top:1px solid var(--bd);margin-top:12px;padding-top:11px"><div class="lbl" style="font-size:10px">Como executar</div><div style="font:400 13.5px var(--fb);color:var(--t2);padding-top:5px;line-height:1.45">'+esc(d.desc||"")+(d.target?'<br><span style="color:var(--t3)">Alvo recomendado: '+esc(d.target)+'</span>':'')+'</div></div>':'')
+      +'</button>';}).join("");
+  const sel=selDrill();
+  return '<div class="scr">'+hdr(B.menu,"Passo 1 de 3",B.home)+prog(1)+'<div class="ttl">O que vai treinar?</div>'
+    +'<div class="chips" role="group" aria-label="Filtrar por categoria">'+CATS.map(c=>'<button class="chip'+(S.filter===c.k?" on":"")+'" data-a="filter" data-v="'+c.k+'">'+c.l+'</button>').join("")+'</div>'
+    +'<div class="body" style="gap:10px">'+(cards||'<div class="empty">Nenhum drill nesta categoria.</div>')+'<button class="dash" data-a="go" data-v="drills">+ Criar drill</button></div>'
+    +'<div class="foot"><button class="btn p" data-a="step2" style="min-height:60px">'+(sel&&list.some(d=>d.id===sel.id)?"Continuar com "+esc(sel.name):"Escolha um drill")+'</button></div></div>';
+};
+
+/* 3. PASSO 2 — material e distância */
+SCREENS.step2=()=>{
+  const d=selDrill();if(!d){S.screen="step1";return SCREENS.step1();}
+  ensureGear();const s=DB.settings,cals=calsFor(s.gun),mic=micOn();
+  return '<div class="scr">'+hdr(B.menu,"Passo 2 de 3",B.home)+prog(2)
+    +'<div class="ttl">Material e distância<div class="sub">'+esc(d.name)+' · '+(d.shots>0?plural(d.shots,"tiro","tiros"):"tiros livres")+'</div></div>'
+    +'<div class="body">'
+    +'<div class="card"><div class="split" style="align-items:baseline"><div class="lbl">Tipo de arma</div><div class="sub" style="font-size:12px">'+plural(cals.length,"calibre","calibres")+'</div></div>'
+      +'<div class="g3">'+GUNS.map(g=>'<button class="opt'+(s.gun===g?" on":"")+'" data-a="gun" data-v="'+g+'" aria-pressed="'+(s.gun===g)+'">'+g+'</button>').join("")+'</div></div>'
+    +'<div class="card"><div class="lbl">Calibre · '+esc(s.gun)+'</div><div class="g3">'
+      +cals.map(c=>'<button class="opt m'+(s.cal===c?" on":"")+'" data-a="cal" data-v="'+esc(c)+'" aria-pressed="'+(s.cal===c)+'">'+esc(c)+'</button>').join("")
+      +'<button class="opt add" data-a="addCalOpen">+ outro</button></div>'
+      +(S.showAddCal?'<div style="display:flex;gap:8px;padding-top:10px"><input class="inp" id="addCal" placeholder="ex: .357 SIG" aria-label="Novo calibre" maxlength="16"><button class="btn p none" data-a="addCalSave" style="min-height:44px;border-radius:10px;font-size:14px">Salvar</button></div><div class="sub" style="font-size:12px;padding-top:6px">Fica salvo na sua lista de '+esc(s.gun)+'.</div>':'')
+    +'</div>'
+    +'<div style="display:flex;gap:11px"><div class="card" style="flex:1"><div class="lbl">Distância (m)</div>'+stepper("dist",fnum(S.dist),"distância")+'</div>'
+      +'<div class="card" style="flex:1"><div class="lbl">Repetições</div>'+stepper("reps",S.reps,"repetições")+'</div></div>'
+    +(S.reps>1?'<div class="card split"><div><div class="lbl">Descanso entre reps</div><div class="sub" style="font-size:12.5px">'+(S.rest>0?"a próxima rep começa sozinha":"as reps emendam direto")+'</div></div><div style="display:flex;align-items:center;gap:10px"><button class="sb" data-a="rest" data-v="-1" aria-label="Diminuir descanso">−</button><div class="num" style="font-size:19px;width:62px">'+(S.rest>0?S.rest+" s":"nenhum")+'</div><button class="sb" data-a="rest" data-v="1" aria-label="Aumentar descanso">+</button></div></div>':'')
+    +'<button class="card split" data-a="micToggle" role="switch" aria-checked="'+mic+'"><div><div style="font:500 15px var(--fb)">Detecção por microfone</div><div class="sub" style="font-size:13px">'+(mic?"margem "+Math.round(marginDb(s.sens))+" dB · pronto":"dry-fire · sem detecção")+'</div></div><span class="tg'+(mic?" on":"")+'"><i></i></span></button>'
+    +'<button class="link" data-a="go" data-v="mic">Ajustar captação do microfone</button>'
+    +'</div>'
+    +'<div class="foot"><button class="btn sq" data-a="go" data-v="step1" aria-label="Voltar ao passo 1">‹</button><button class="btn p" data-a="start" style="min-height:60px;font-size:18px">Ir para o timer</button></div></div>';
+};
+function micOn(){return DB.settings.mic!==false&&!DB.settings.dry;}
+
+/* 4. TIMER — um único alvo de toque; legível a 2 m; sem menu nem ⌂ */
+SCREENS.timer=()=>{
+  const d=T.drill;
+  return '<div class="scr exec"><div class="flash" id="flash"></div>'
+    +'<div class="topline"><span>'+(T.reps>1?"Rep "+T.rep+" de "+T.reps+" · ":"")+esc(d.name)+'</span><span id="ph"></span></div>'
+    +'<div class="warn" id="mwarn" style="display:none" role="alert"></div>'
+    +'<div class="ring" role="timer"><div class="clk" id="clk">0,00</div><div class="rl">'+parLine(d)+'</div></div>'
+    +'<div class="card" style="background:var(--rec);flex:1;min-height:0;overflow:auto"><div class="lbl">Splits ao vivo</div><div class="rows" id="spl"></div></div>'
+    +'<button class="btn" id="stopBtn" data-a="stopT" style="flex:none;min-height:64px;border:1.5px solid var(--pend);color:var(--t1);font:600 18px var(--fb)">Cancelar</button></div>';
+};
+
+/* 5. DESCANSO — contagem regressiva; a próxima rep começa sozinha */
+SCREENS.rest=()=>{
+  const r=T.runs[T.runs.length-1];
+  return '<div class="scr exec" style="gap:16px;align-items:center;text-align:center">'
+    +'<div class="topline" style="align-self:stretch"><span>Bloco · rep '+T.runs.length+' de '+T.reps+'</span><span>descanso</span></div>'
+    +'<div class="ring rest"><div class="big70" id="restLeft">'+T.restLeft+'</div><div class="rl">Segundos</div></div>'
+    +'<div style="font:500 17px var(--fb);padding-top:6px">A rep '+T.rep+' começa sozinha</div>'
+    +'<div class="card split" style="background:var(--rec)"><div style="text-align:left"><div class="lbl" style="font-size:10.5px">Rep anterior</div><div style="font:400 13.5px var(--fb);color:var(--t2)">rep '+r.rep+' · '+fmt(r.total,2)+' s'+(r.shots.length?' · 1º tiro '+fmt(r.shots[0],2)+' s':'')+'</div></div><div class="mono" style="font-weight:700;font-size:20px;color:var(--acc)">'+plural(r.shots.length,"tiro","tiros")+'</div></div>'
+    +'<div style="align-self:stretch;display:flex;gap:11px;margin-top:auto"><button class="btn" data-a="restAdd">+10 s</button><button class="btn p" data-a="restSkip" style="font-size:16px">Começar já</button></div>'
+    +'<button class="btn" data-a="restStop" style="align-self:stretch;flex:none;width:100%;min-height:54px">Encerrar bloco agora</button></div>';
+};
+
+/* 6. SEM TIRO — o cronômetro rodou mas o microfone não ouviu nada */
+SCREENS.noshot=()=>'<div class="scr exec"><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center">'
+  +'<div style="width:74px;height:74px;border-radius:50%;border:2px solid var(--bad-bd);display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--bad)">!</div>'
+  +'<div style="font:600 23px var(--fb)">Nenhum tiro detectado</div>'
+  +'<div style="font:400 14.5px var(--fb);color:var(--t2);line-height:1.5;max-width:290px">O cronômetro rodou, mas o microfone não ouviu disparos. Normalmente é protetor auricular sobre o celular, margem muito alta ou o aparelho longe da linha.</div>'
+  +'<div class="card" style="background:var(--rec)"><div class="lbl" style="font-size:10.5px">O que tentar</div><div style="font:400 13.5px var(--fb);color:var(--t2);padding-top:5px;line-height:1.5">Margem atual '+Math.round(marginDb(DB.settings.sens))+' dB — baixe um pouco. Deixe o celular a até 2 m da baia, com o microfone livre.</div></div></div>'
+  +'<div style="display:flex;flex-direction:column;gap:11px;padding-top:16px"><button class="btn p" data-a="retry" style="flex:none;min-height:60px">Tentar de novo</button>'
+  +'<div style="display:flex;gap:11px"><button class="btn" data-a="go" data-v="mic" style="min-height:54px">Ajustar mic</button><button class="btn" data-a="backToPrep" style="min-height:54px">Voltar ao preparo</button></div></div></div>';
+
+/* 7. PONTUAÇÃO — depois de todas as reps, tiro a tiro, teclado de zonas gigante */
+SCREENS.score=()=>{
+  const r=scoreRun(),i=T.scoreIdx,multi=T.runs.length>1,k=T.zones.length;
+  const chips=r.shots.map((_,j)=>{if(j<k){const z=T.zones[j];return '<span class="sc '+(z==="M"?"miss":"done")+'">'+z+'</span>';}return '<span class="sc'+(j===k?" cur":"")+'">'+(j===k?j+1:"")+'</span>';}).join("");
+  const zb=(z,pts,cls)=>'<button class="zb'+(cls?" "+cls:"")+'" data-a="zone" data-v="'+z+'" aria-label="Zona '+(z==="M"?"miss":z)+'"><b>'+(z==="M"?"MISS":z)+'</b><span>'+pts+'</span></button>';
+  return '<div class="scr">'+hdr(B.menu,multi?"Pontuar · rep "+r.rep+" de "+T.runs.length:"Pontuar · "+esc(T.drill.name),B.close("discard"))
+    +'<div style="padding:0 18px 4px;font:600 24px var(--fb)">Tiro '+Math.min(k+1,r.shots.length)+' de '+r.shots.length+'</div>'
+    +'<div class="sub" style="padding:0 18px 12px">rep '+r.rep+' · '+fmt(r.total,2)+' s no total</div>'
+    +'<div class="shotchips">'+chips+'</div>'
+    +'<div class="zones">'+zb("A","+5 PTS")+zb("C","+3 PTS")+zb("D","+1 PT")+zb("M","−10 PTS","miss")+'</div>'
+    +'<div class="foot" style="padding-top:0"><button class="btn" data-a="undo" style="min-height:54px">Desfazer</button><button class="btn" data-a="skipScore" style="min-height:54px">Pontuar depois</button></div></div>';
+};
+
+/* 8. RESULTADO — rep única */
+SCREENS.result=()=>{
+  const r=T.runs[0],c=calc(r),best=bestHfFor(T.drill.id);
+  const record=c.scored&&c.hf>0&&c.hf>=best;
+  const tally=c.scored?'<div class="tally">'+[["A",c.a],["C",c.c],["D",c.d],["M",c.m]].map(([z,n])=>'<span class="'+(n?"on":"")+(z==="M"?" miss":"")+'">'+z+' ×'+n+'</span>').join("")+'</div>':'<div class="sub" style="padding-top:8px">Sem pontuação — só os tempos foram guardados.</div>';
+  return '<div class="scr">'+hdr(B.menu,"Resultado · "+esc(T.drill.name),B.home)
+    +'<div style="padding:0 18px 12px;font:600 24px var(--fb)">'+(record?"Melhor marca até agora":"Sessão registrada")+'</div>'
+    +'<div class="kpis">'+kpi(fmt(c.total,2),"Total")+kpi(c.first!=null?fmt(c.first,2):dash,"1º tiro")+kpi(c.scored?fmt(c.hf,2):dash,"Hit factor",true)+'</div>'
+    +'<div class="card" style="margin:0 18px 13px;width:auto"><div class="lbl">'+(c.scored?"Zonas · "+c.points+" pontos":"Zonas")+'</div>'+tally+'</div>'
+    +'<div class="card" style="margin:0 18px 13px;width:auto;flex:1;min-height:0;overflow:auto"><div class="lbl">Tiro a tiro</div><div class="rows" style="gap:9px">'+shotRows(r,true)+'</div></div>'
+    +'<div class="foot" style="padding-top:0"><button class="btn" data-a="discard">Descartar</button><button class="btn p x" data-a="saveOne">Salvar treino</button></div></div>';
+};
+
+/* 9. RELATÓRIO DO BLOCO */
+SCREENS.block=()=>{
+  const rows=T.runs.map(r=>Object.assign({rep:r.rep},calc(r)));
+  const sc=rows.filter(x=>x.scored&&x.total>0),hfs=sc.map(x=>x.hf);
+  const bestHf=hfs.length?Math.max(...hfs):null,avg=hfs.length?hfs.reduce((a,b)=>a+b,0)/hfs.length:null;
+  const dev=hfs.length>1?Math.sqrt(hfs.reduce((a,b)=>a+(b-avg)*(b-avg),0)/hfs.length):null;
+  let insight;
+  if(hfs.length>1){const bi=sc[hfs.indexOf(bestHf)],wi=sc[hfs.indexOf(Math.min(...hfs))];insight="Sua melhor rep foi a "+bi.rep+" (HF "+fmt(bi.hf,2)+") e a mais fraca a "+wi.rep+" (HF "+fmt(wi.hf,2)+"). Quanto menor o desvio, mais repetível está seu ritmo.";}
+  else if(hfs.length===1)insight="Só uma rep foi pontuada. Pontue as outras depois, no detalhe da sessão, para comparar o ritmo.";
+  else{const tt=rows.filter(x=>x.total>0).map(x=>x.total);insight=tt.length>1?"Sem pontuação, dá para comparar só o tempo: a mais rápida levou "+fmt(Math.min(...tt),2)+" s e a mais lenta "+fmt(Math.max(...tt),2)+" s.":"Sem pontuação: só os tempos foram guardados.";}
+  const d=T.drill;
+  return '<div class="scr">'+hdr(B.menu,"Relatório do bloco",B.home)
+    +'<div class="ttl" style="padding-top:0">'+esc(d.name)+'<div class="sub">'+plural(T.runs.length,"rep","reps")+(T.runs.length<T.reps?" de "+T.reps+" (parcial)":"")+' · '+esc(T.cal)+' · '+fnum(T.dist)+' m</div></div>'
+    +'<div class="kpis">'+kpi(bestHf!=null?fmt(bestHf,2):dash,"Melhor HF",false,bestHf!=null?"var(--acc)":"")+kpi(avg!=null?fmt(avg,2):dash,"HF médio")+kpi(dev!=null?fmt(dev,2):dash,"Desvio",false,dev!=null?(dev<0.4?"var(--ok)":"var(--bad)"):"")+'</div>'
+    +'<div class="body" style="padding:0;gap:0"><div class="tbl"><div class="tr h"><span>Rep</span><span>Tempo</span><span>1º tiro</span><span>Precisão</span><span>HF</span></div>'
+    +rows.map(x=>'<div class="tr"><span>'+x.rep+'</span><span>'+fmt(x.total,2)+'</span><span>'+(x.first!=null?fmt(x.first,2):dash)+'</span><span style="color:'+(x.scored?(x.m?"var(--bad)":"var(--ok)"):"var(--t3)")+'">'+(x.scored?fmt(x.acc,0)+"%":dash)+'</span><span style="font-weight:700;color:'+(x.scored&&x.hf===bestHf?"var(--acc)":"var(--t1)")+'">'+(x.scored?fmt(x.hf,2):dash)+'</span></div>').join("")
+    +'</div><div class="note">'+insight+'</div></div>'
+    +'<div class="foot" style="padding-top:0"><button class="btn" data-a="discard">Descartar</button><button class="btn p x" data-a="saveBlock">Salvar bloco</button></div></div>';
+};
+
+/* áreas que chegam nas fases 2 e 3 (os dados já são os mesmos da versão atual) */
+const SOON={}; /* fases 2 e 3 implementadas: sem placeholders */
+Object.keys(SOON).forEach(k=>{SCREENS[k]=()=>'<div class="scr">'+hdr(B.menu,SOON[k],B.home)
+  +'<div class="body"><div class="card" style="padding:16px"><div class="lbl">Próxima fase</div><div style="font:600 19px var(--fb);padding:6px 0 6px">'+SOON[k]+' ainda está na versão atual</div>'
+  +'<div class="sub" style="font-size:14px;color:var(--t2)">Esta área ganha o novo visual na próxima fase do redesign. Os dados são os mesmos: o que você fizer na versão atual aparece aqui, e vice-versa'+(k==="mic"?" — inclusive a margem e a janela anti-eco da calibração":"")+'.</div></div></div>'
+  +'<div class="foot"><a class="btn p" href="cadencia.html">Abrir a versão atual</a></div></div>';});
+
+/* ---------- linhas "tiro a tiro" ---------- */
+function shotRows(r,withZones){
+  if(!r.shots.length)return '<div class="sub">Nenhum tiro registrado.</div>';
+  const sp=r.shots.map((t,i)=>i?t-r.shots[i-1]:t),mx=Math.max(...sp,0.01);
+  return sp.map((v,i)=>{const z=withZones&&r.zones?r.zones[i]:null;
+    return '<div class="row"><span class="n">'+(i+1)+'</span><div class="bar tall'+(z==="M"?" miss":"")+'" style="width:'+Math.max(6,v/mx*55)+'%"></div><span style="width:44px;flex:none">'+fmt(v,2)+'</span>'+(z?'<span class="ztag'+(z==="M"?" miss":"")+'">'+(z==="M"?"miss":z)+'</span>':'')+'</div>';}).join("");
+}
+
+/* ---------- cálculo de uma rep (fórmulas do handoff) ----------
+   hit factor = pontos / tempo total (pontos nunca negativos na exibição)
+   precisão   = (tiros − misses) / tiros · split[i] = t[i] − t[i−1] */
+function calc(r){
+  const shots=r.shots,total=r.total||0,first=shots.length?shots[0]:null;
+  const splits=shots.slice(1).map((t,i)=>t-shots[i]);
+  const o={total,first,splits,scored:false,a:0,c:0,d:0,m:0,hits:0,miss:0,points:0,acc:0,hf:0};
+  if(r.zones&&r.zones.length){r.zones.forEach(z=>{if(z==="A")o.a++;else if(z==="C")o.c++;else if(z==="D")o.d++;else o.m++;});
+    o.scored=true;o.hits=o.a+o.c+o.d;o.miss=o.m;o.points=o.a*5+o.c*3+o.d-o.m*10;
+    o.acc=r.zones.length?o.hits/r.zones.length*100:0;o.hf=total>0?Math.max(0,o.points)/total:0;}
+  return o;
+}
+
+/* =============================================================================
+   MENU / CONFIRMAÇÃO / TOAST
+   ============================================================================= */
+function menuSheet(){
+  const late=backupLate(),nm=userName();
+  const items=[["home","⌂","Início","hoje"],["drills","◎","Drills",plural(DB.drills.length,"salvo","salvos")],["challenges","⚑","Desafios",plural(DB.challenges.length,"ativo","ativos")],["progress","▤","Progresso",plural(DB.sessions.length,"sessão","sessões")],["profile","⊙","Perfil",nm||"seu nome"],["settings","⚙","Config",late?"backup atrasado":"tudo salvo"]];
+  return '<div class="ovl" role="dialog" aria-modal="true" aria-label="Menu"><button class="scrim" data-a="menuClose" aria-label="Fechar menu"></button><div class="sheet"><div class="grab"></div>'
+    +'<div class="split"><div class="lbl">Ir para</div><button class="hb" data-a="menuClose" style="width:40px;height:40px;border-radius:10px" aria-label="Fechar menu">✕</button></div>'
+    +'<div class="mgrid">'+items.map(([k,ic,l,m])=>'<button class="mi'+(S.screen===k?" on":"")+'" data-a="go" data-v="'+k+'"><span class="ic">'+ic+'</span><span><span class="nm" style="display:block">'+l+'</span><span class="mt'+(k==="settings"&&late?" late":"")+'" style="display:block">'+esc(m)+'</span></span></button>').join("")+'</div>'
+    +'<button class="btn p cta" data-a="flow" style="min-height:58px;border-radius:15px;font-size:15px;letter-spacing:.16em;flex:none"><span style="font-size:20px;line-height:1">⌖</span>INICIAR TREINO</button></div></div>';
+}
+function askSheet(){const a=S.ask;
+  return '<div class="ovl" role="alertdialog" aria-modal="true" aria-label="'+esc(a.title)+'"><button class="scrim" data-a="askNo" aria-label="Cancelar"></button><div class="sheet">'
+    +'<div style="font:600 20px var(--fb)">'+esc(a.title)+'</div><div style="font:400 14px var(--fb);color:var(--t2);line-height:1.45">'+esc(a.body)+'</div>'
+    +'<button class="btn '+(a.danger?"bad":"p")+'" data-a="askYes" style="flex:none;min-height:56px;border-radius:14px">'+esc(a.ok)+'</button>'
+    +'<button class="btn" data-a="askNo" style="flex:none;min-height:52px;border-radius:14px">Cancelar</button></div></div>';}
+/* confirmação em folha inferior (substitui confirm() — não quebra o visual nem trava em WebView) */
+function ask(title,body,ok,onYes,danger){S.ask={title,body,ok,onYes,danger};render();}
+function toast(msg){S.toast=msg;clearTimeout(toastTimer);paintToast();toastTimer=setTimeout(()=>{S.toast="";paintToast();},2200);}
+/* o toast é pintado à parte para não re-renderizar a tela (importante no descanso) */
+function paintToast(){let el=document.getElementById("toast");if(!S.toast){if(el)el.remove();return;}if(!el){el=document.createElement("div");el.id="toast";el.className="toast";el.setAttribute("role","status");el.setAttribute("aria-live","polite");$("#app").appendChild(el);}el.textContent=S.toast;}
+
+/* =============================================================================
+   RENDER + AÇÕES
+   ============================================================================= */
+function render(){
+  const f=SCREENS[S.screen]||SCREENS.home;let html=f();
+  if(S.menu)html+=menuSheet();
+  if(S.ask)html+=askSheet();
+  $("#app").innerHTML=html;paintToast();
+  if(S.screen==="timer")paintTimer();
+  if(S.screen==="step2"&&S.showAddCal){const i=$("#addCal");if(i)i.focus();}
+}
+function go(screen){S.menu=false;S.ask=null;S.screen=screen;S.showAddCal=false;render();const b=document.querySelector(".body");if(b)b.scrollTop=0;}
+/* seleciona um drill e já puxa a distância padrão dele */
+function pickDrill(id){const d=drillById(id);if(!d)return;S.selId=id;S.dist=d.dist||7;}
+
+const ACT={
+  menu:()=>{S.menu=true;render();},
+  menuClose:()=>{S.menu=false;render();},
+  go:v=>go(v),
+  flow:()=>{if(!selDrill())pickDrill((DB.drills[0]||{}).id);go("step1");},
+  resume:()=>{const s=lastSession();if(!s)return go("step1");pickDrill(s.drillId);S.dist=s.dist||S.dist;S.reps=s.blockSize||1;
+    if(s.weapon&&GUNS.indexOf(s.weapon)>=0){DB.settings.gun=s.weapon;if(s.cal)DB.settings.cal=s.cal;}ensureGear();save();go("step2");},
+  filter:v=>{S.filter=v;const list=DB.drills.filter(d=>v==="all"||d.tag===v);if(list.length&&!list.some(d=>d.id===S.selId))pickDrill(list[0].id);render();},
+  pick:v=>{pickDrill(v);render();},
+  step2:()=>{const d=selDrill(),vis=DB.drills.some(x=>x.id===S.selId&&(S.filter==="all"||x.tag===S.filter));if(!d||!vis){toast("Escolha um drill");return;}go("step2");},
+  gun:v=>{DB.settings.gun=v;DB.settings.cal=calsFor(v)[0];S.showAddCal=false;save();render();},
+  cal:v=>{DB.settings.cal=v;save();render();},
+  addCalOpen:()=>{S.showAddCal=!S.showAddCal;render();},
+  addCalSave:()=>{const v=(($("#addCal")||{}).value||"").trim();if(!v){toast("Escreva o calibre");return;}const g=DB.settings.gun;
+    DB.settings.customCals=DB.settings.customCals||{};const arr=DB.settings.customCals[g]=DB.settings.customCals[g]||[];
+    if(calsFor(g).indexOf(v)<0)arr.push(v);DB.settings.cal=v;S.showAddCal=false;save();render();toast(v+" adicionado aos calibres de "+g);},
+  dist:v=>{S.dist=Math.max(1,Math.min(50,Math.round(S.dist)+(+v)));render();},
+  reps:v=>{S.reps=Math.max(1,Math.min(20,S.reps+(+v)));render();},
+  rest:v=>{S.rest=Math.max(0,Math.min(300,S.rest+5*(+v)));render();},
+  micToggle:()=>{const on=!micOn();DB.settings.mic=on;DB.settings.dry=!on;save();render();},
+  start:()=>startTraining(),
+  stopT:()=>{if(!run)return;if(run.started)stopRep();else cancelRep();},
+  restAdd:()=>{T.restLeft+=10;const el=$("#restLeft");if(el)el.textContent=T.restLeft;},
+  restSkip:()=>{clearRest();runRep();},
+  restStop:()=>{clearRest();beginScoring();},
+  retry:()=>runRep(),
+  backToPrep:()=>{if(T&&T.runs.length)ask("Voltar ao preparo?",plural(T.runs.length,"rep já feita será descartada","reps já feitas serão descartadas")+".","Voltar e descartar",()=>{T=null;go("step2");},true);else{T=null;go("step2");}},
+  zone:v=>scoreZone(v),
+  undo:()=>scoreUndo(),
+  skipScore:()=>{T.zones=[];finishScoring();},
+  discard:()=>ask(T.editSession?"Sair sem salvar?":"Descartar este treino?",T.editSession?"A pontuação desta sessão não muda.":"Os tempos de "+plural(T.runs.length,"rep","reps")+" não serão salvos.",T.editSession?"Sair":"Descartar",()=>{const ch=T.challenge,ed=T.editSession;T=null;if(ch&&ch.online)setPresence(ch.code,"terminou");if(ed){go("detail");return;}go("home");toast("Treino descartado");},true),
+  saveOne:()=>saveTraining(),
+  saveBlock:()=>saveTraining(),
+  backup:()=>exportBackup(),
+  askYes:()=>{const a=S.ask;S.ask=null;if(a&&a.onYes)a.onYes();else render();},
+  askNo:()=>{S.ask=null;render();}
+};
+document.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(!el||!document.getElementById("app").contains(el))return;const fn=ACT[el.dataset.a];if(fn)fn(el.dataset.v,el);});
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target&&e.target.id==="addCal")ACT.addCalSave();if(e.key==="Escape"&&(S.menu||S.ask)){S.menu=false;S.ask=null;render();}});
+
+/* =============================================================================
+   FLUXO DE TREINO — liga a interface ao motor (mesma sequência da v7:
+   standby aprendendo o piso -> atraso aleatório -> beep/vibração/flash ->
+   loop do detector -> auto-stop no nº de tiros)
+   ============================================================================= */
+function startTraining(challenge){
+  let d=selDrill();ensureGear();
+  if(challenge){d=drillById(challenge.drillId)||(challenge.drillSnap?Object.assign({id:challenge.drillId,builtin:0,tag:"livre"},challenge.drillSnap):null);}
+  if(!d){toast("Drill indisponível neste aparelho");return;}
+  DB.settings.blockRest=S.rest;save();
+  const reps=challenge?1:S.reps;
+  T={drill:d,challenge:challenge||null,gun:DB.settings.gun,cal:DB.settings.cal,dist:challenge?challenge.dist:S.dist,reps,rest:reps>1?S.rest:0,blockId:reps>1?uid():null,rep:1,runs:[],restLeft:0,scoreIdx:0,zones:[],queue:[]};
+  if(challenge&&challenge.online)ensureOnline().then(ok=>{if(ok)setPresence(challenge.code,"atirando");});
+  runRep();
+}
+async function runRep(){
+  S.menu=false;S.ask=null;S.screen="timer";
+  const r={det:newDetector(),shots:[],started:false,beepAt:0,raf:null,preRaf:null,goTimer:null,parTimer:null,autoTimer:null,useMic:micOn(),micFail:false};
+  run=r;render();ensureAC();reqWake();
+  if(r.useMic){const ok=await startMic(DB.settings.audioDeviceId||undefined);if(run!==r)return;/* cancelado enquanto pedia permissão */
+    if(!ok){r.useMic=false;r.micFail=true;}else{DB.settings.micGranted=true;save();if(DB.settings.lab)startLabRec(r);preLoop();}}
+  const s=DB.settings,delay=(s.dlyMin+Math.random()*Math.max(0,s.dlyMax-s.dlyMin))*1000;
+  r.goTimer=setTimeout(goSignal,delay);paintTimer();
+}
+/* standby: aprende o piso de ruído enquanto espera o beep (idêntico à v7) */
+function preLoop(){if(!run||run.started||!run.useMic)return;const perf=performance.now(),flUsed=run.det.floor;const fr=micFrame();updateFloor(run.det,fr.peak);
+  /* Modo Laboratório (v7 B7/B6): frames do standby entram na timeline */
+  if(run.lab&&run.lab.tl.length<40000){const th=effThresh(run.det,DB.settings.sens);run.lab.tl.push({tMs:null,tPerf:+perf.toFixed(2),phase:"standby",peak:+fr.peak.toFixed(4),rms:+fr.rms.toFixed(4),clip:+fr.clip.toFixed(4),floor:+flUsed.toFixed(4),thresh:+th.toFixed(4),guard:+run.det.guard.toFixed(4),shot:0});}
+  run.preRaf=requestAnimationFrame(preLoop);}
+/* largada: beep + vibração + flash (sinal visual redundante para quem usa protetor) */
+function goSignal(){if(!run)return;if(run.preRaf)cancelAnimationFrame(run.preRaf);
+  run.det.lastT=-999;run.det.guard=0;run.beepAt=performance.now();if(run.lab)run.lab.meta.beepPerf=+run.beepAt.toFixed(2);run.started=true;beep();
+  if(DB.settings.vibrate&&navigator.vibrate)navigator.vibrate([90,40,90]);
+  if(DB.settings.flash){const f=$("#flash");if(f){f.className="flash";void f.offsetWidth;f.className="flash "+(DB.settings.flashDouble?"go2":"go");}}
+  if(T.drill.par>0&&DB.settings.parBeep)run.parTimer=setTimeout(()=>beep(),T.drill.par*1000);
+  paintTimer();loop();}
+/* loop do detector — mesma chamada de decisão da v7 (isShot com sens/requireClip);
+   R1: se o AudioContext cair (app voltou do fundo), tenta retomar e avisa */
+function loop(){if(!run||!run.started)return;const now=(performance.now()-run.beepAt)/1000;
+  if(run.useMic&&AC){if(AC.state!=="running"){try{AC.resume();}catch(e){}}run.acDown=AC.state!=="running";}
+  if(run.useMic){const perf=performance.now(),flUsed=run.det.floor;const fr=micFrame();let sh=0;if(isShot(run.det,fr,DB.settings.sens,now,!!DB.settings.requireClip)){registerShot(now);sh=1;}
+    if(run&&run.lab&&run.lab.tl.length<40000){const dec=run.det.lastDec||{thresh:0,guard:0};run.lab.tl.push({tMs:Math.round(now*1000),tPerf:+perf.toFixed(2),phase:"run",peak:+fr.peak.toFixed(4),rms:+fr.rms.toFixed(4),clip:+fr.clip.toFixed(4),floor:+flUsed.toFixed(4),thresh:+dec.thresh.toFixed(4),guard:+dec.guard.toFixed(4),shot:sh});}}
+  if(!run)return;
+  const c=document.getElementById("clk");if(c)c.textContent=fmt(now,2);
+  paintWarn();run.raf=requestAnimationFrame(loop);}
+function registerShot(t){run.shots.push(t);paintSplits();const n=T.drill.shots;
+  if(n>0&&run.shots.length>=n&&!run.autoTimer)run.autoTimer=setTimeout(()=>{if(run&&run.started)stopRep();},250);}
+function clearRunTimers(r){if(!r)return;["raf","preRaf"].forEach(k=>{if(r[k])cancelAnimationFrame(r[k]);});["goTimer","parTimer","autoTimer"].forEach(k=>{if(r[k])clearTimeout(r[k]);});}
+/* Parar: aproveita os tiros já detectados */
+function stopRep(){const r=run;if(!r)return;clearRunTimers(r);r.started=false;run=null;
+  const total=r.shots.length?r.shots[r.shots.length-1]:(performance.now()-r.beepAt)/1000;
+  const cont=()=>{stopMic();relWake();
+    if(r.useMic&&!r.shots.length){S.screen="noshot";render();return;}
+    T.runs.push({rep:T.rep,shots:r.shots.slice(),total,zones:null});afterRep();};
+  if(r.lab)finishLab(r,cont);else cont();}
+/* Cancelar (antes da largada): volta ao preparo; no meio de um bloco, vai pontuar o que já foi feito */
+function cancelRep(){const r=run;clearRunTimers(r);if(r&&r.lab&&r.lab.rec&&r.lab.rec.state==="recording"){try{r.lab.rec.stop();}catch(e){}}stopMic();relWake();run=null;
+  if(T&&T.runs.length){beginScoring();return;}T=null;go("step2");}
+function afterRep(){if(T.rep<T.reps){T.rep++;if(T.rest>0)startRest();else runRep();}else beginScoring();}
+
+/* pintura parcial do timer (sem re-render) */
+function paintTimer(){const ph=$("#ph"),b=$("#stopBtn");if(!run)return;
+  if(ph){ph.textContent=run.started?"● ao vivo":(run.useMic?"standby":"standby · dry-fire");ph.style.color=run.started?"var(--bad)":"var(--t3)";}
+  if(b)b.textContent=run.started?"Parar":"Cancelar";paintSplits();paintWarn();}
+function paintSplits(){const el=$("#spl");if(!el||!run)return;const sh=run.shots,exp=T.drill.shots,n=Math.max(exp,sh.length);
+  const sp=sh.map((t,i)=>i?t-sh[i-1]:t),mx=Math.max(0.5,...sp);let h="";
+  for(let i=0;i<n;i++)h+=i<sh.length?'<div class="row"><span class="n">'+(i+1)+'</span><div class="bar" style="width:'+Math.max(6,sp[i]/mx*62)+'%"></div><span>'+fmt(sp[i],2)+'</span></div>'
+    :'<div class="row"><span class="n">'+(i+1)+'</span><div class="bar pend" style="width:28%"></div><span style="color:var(--pend)">'+dash+'</span></div>';
+  el.innerHTML=h||'<div class="sub">'+(run.useMic?"Os tiros aparecem aqui conforme o microfone detecta.":"Dry-fire: toque em Parar no último tiro.")+'</div>';
+  if(sh.length)el.parentElement.scrollTop=el.parentElement.scrollHeight;}
+function paintWarn(){const w=$("#mwarn");if(!w||!run)return;let msg="";
+  if(run.micFail)msg="Microfone indisponível — sem detecção. Toque em Parar no último tiro.";
+  else if(run.acDown)msg="⚠ Microfone pausado — detecção interrompida";
+  if(w.textContent!==msg){w.textContent=msg;w.style.display=msg?"block":"none";}}
+
+/* descanso entre reps */
+function startRest(){T.restLeft=T.rest;restPaused=false;S.screen="rest";render();clearInterval(restTimer);
+  restTimer=setInterval(()=>{T.restLeft--;if(T.restLeft<=0){clearRest();runRep();}else{const el=$("#restLeft");if(el)el.textContent=T.restLeft;}},1000);}
+function clearRest(){clearInterval(restTimer);restTimer=null;}
+/* B11 (v7): nunca largar com o app em segundo plano — pausa a contagem e,
+   na volta, reinicia o descanso inteiro (o atirador pode estar longe da baia).
+   R1 (v7): ao voltar com um treino ativo, retoma o AudioContext. */
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="hidden"){if(restTimer){clearRest();restPaused=true;}}
+  else{if(run&&run.started){reqWake();if(AC&&AC.state!=="running"){try{AC.resume();}catch(e){}}}
+    if(restPaused&&T&&S.screen==="rest"){restPaused=false;startRest();toast("Descanso reiniciado");}}
+});
+
+/* =============================================================================
+   PONTUAÇÃO — depois de todas as reps; reps sem tiro são puladas
+   ============================================================================= */
+function beginScoring(){T.queue=T.runs.map((r,i)=>i).filter(i=>T.runs[i].shots.length>0);T.scoreIdx=0;T.zones=[];
+  if(!T.queue.length){finishScoring();return;}S.screen="score";render();}
+function scoreRun(){return T.runs[T.queue[T.scoreIdx]];}
+function scoreZone(z){const r=scoreRun();if(!r)return;T.zones.push(z);
+  if(T.zones.length>=r.shots.length){r.zones=T.zones.slice();T.zones=[];T.scoreIdx++;if(T.scoreIdx>=T.queue.length){finishScoring();return;}}
+  render();}
+function scoreUndo(){if(T.zones.length){T.zones.pop();render();return;}
+  if(T.scoreIdx>0){T.scoreIdx--;const r=scoreRun();T.zones=(r.zones||[]).slice(0,-1);r.zones=null;render();}}
+function finishScoring(){if(T.editSession){applyRescore();return;}S.screen=T.runs.length===1?"result":"block";render();}
+
+/* =============================================================================
+   SALVAR — formato de sessão da v7 (cada rep vira uma sessão; bloco via blockId)
+   ============================================================================= */
+function sessionFrom(r){const d=T.drill,c=calc(r);return{
+  id:uid(),date:new Date().toISOString(),profileId:DB.currentProfile,profileName:profName(DB.currentProfile),
+  drillId:d.id,drillName:d.name,challengeId:T.challenge?T.challenge.id:null,weapon:T.gun,cal:T.cal,dist:T.dist,
+  total:+c.total.toFixed(3),first:c.first!=null?+c.first.toFixed(3):null,splits:c.splits.map(x=>+x.toFixed(3)),
+  nShots:r.shots.length,expShots:d.shots,smode:"ipsc",zones:c.scored?{a:c.a,c:c.c,d:c.d,ms:c.m}:null,
+  shotZones:c.scored?r.zones.slice():null, /* v8: zona de cada tiro (para o "tiro a tiro"); a v7 ignora */
+  hits:c.hits,miss:c.miss,points:c.points,acc:+c.acc.toFixed(1),hf:+c.hf.toFixed(3),
+  corr:+(c.total+c.miss*(d.pen||0)).toFixed(3),scored:c.scored,
+  blockId:T.blockId||undefined,repIndex:T.blockId?r.rep:undefined,blockSize:T.blockId?T.reps:undefined,notes:""};}
+function saveTraining(){if(!T)return;const n=T.runs.length,ch=T.challenge,saved=T.runs.map(sessionFrom);saved.forEach(x=>DB.sessions.push(x));save();
+  if(ch&&ch.online&&saved[0])submitOnlineResult(ch,saved[0]);
+  const msg=MEM_ONLY?"Salvo só nesta sessão (armazenamento indisponível)":ch?"Resultado enviado ao desafio":(n>1?"Bloco salvo · "+plural(n,"rep","reps"):"Treino salvo");
+  T=null;if(ch){S.chalId=ch.id;go("ranking");}else go("progress");toast(msg);}
+
+/* backup JSON (mesmo arquivo da v7) */
+function exportBackup(){DB.settings.lastExport=Date.now();save();
+  const blob=new Blob([JSON.stringify(DB,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download="cadencia_dados.json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+  render();toast("Backup exportado");}
+
+/* ============================================================================
+   MÓDULO ONLINE (v5) — Firebase: Authentication anônimo + Firestore (multiplayer).
+   ----------------------------------------------------------------------------
+   PÚBLICO POR DESIGN: a config web do Firebase vai embarcada no cliente de propósito;
+   a segurança é feita pelas REGRAS do Firestore (entregues à parte), NÃO por esconder
+   a chave. Todo este módulo é LAZY e TOLERANTE A FALHA: se o Firebase não carregar ou
+   estiver offline, o app local segue 100% funcional. Só resultados de desafio ONLINE
+   sobem; treino pessoal e histórico permanecem locais.
+   ============================================================================ */
+
+/* >>>>>>>>>>>>>>  CONFIG DO FIREBASE (ajuste aqui se trocar de projeto)  <<<<<<<<<<<<<< */
+const firebaseConfig={
+  apiKey:"AIzaSyB5tP_0bVgN9lgvKbUael2vDJGIauEM0_8",
+  authDomain:"cadencia-78dfb.firebaseapp.com",
+  projectId:"cadencia-78dfb",
+  storageBucket:"cadencia-78dfb.firebasestorage.app",
+  messagingSenderId:"303083480013",
+  appId:"1:303083480013:web:9f194471b19acdbfdc1a84"
+};
+/* >>>>>>>>>>>>>>  FIM DA CONFIG  <<<<<<<<<<<<<< */
+
+const FB_VER="10.12.2";
+const FB_ENABLED=!!(firebaseConfig&&firebaseConfig.apiKey&&firebaseConfig.apiKey.indexOf("COLE")<0&&firebaseConfig.projectId);
+const fb={loaded:false,ready:false,db:null,auth:null,uid:null};
+let chalUnsub=[]; // listeners (ranking/presença) do desafio aberto
+
+/* injeta um <script> de CDN uma única vez */
+function loadScript(src){return new Promise((res,rej)=>{if([...document.scripts].some(s=>s.src===src))return res();const el=document.createElement("script");el.src=src;el.onload=()=>res();el.onerror=()=>rej(new Error("falha ao carregar "+src));document.head.appendChild(el);});}
+/* carrega o SDK compat do Firebase sob demanda (mantém o app em arquivo único) */
+async function loadFirebase(){if(fb.loaded)return;const b="https://www.gstatic.com/firebasejs/"+FB_VER+"/";await loadScript(b+"firebase-app-compat.js");await loadScript(b+"firebase-auth-compat.js");await loadScript(b+"firebase-firestore-compat.js");fb.loaded=true;}
+/* inicializa Firebase + login anônimo; tenta persistência offline. true se pronto. */
+async function ensureOnline(){if(!FB_ENABLED)return false;try{await loadFirebase();
+  if(!fb.ready){if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);fb.auth=firebase.auth();fb.db=firebase.firestore();
+    try{await fb.db.enablePersistence({synchronizeTabs:true});}catch(e){/* multi-aba/sem suporte: segue sem cache offline */}fb.ready=true;}
+  if(!fb.uid){const c=await fb.auth.signInAnonymously();fb.uid=(c&&c.user&&c.user.uid)||(fb.auth.currentUser&&fb.auth.currentUser.uid);}
+  flushOutbox();return !!fb.uid;
+ }catch(e){return false;}}
+/* v8: nome de exibição online = nome do atirador ativo (definido no Perfil ou no onboarding) */
+function onlineName(){return userName()||"Atirador";}
+const CODE_CHARS="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sem 0/O/1/I para não confundir
+function newCode(){let s="";const a=new Uint8Array(6),g=(typeof crypto!=="undefined"&&crypto.getRandomValues)?crypto:{getRandomValues:x=>{for(let i=0;i<x.length;i++)x[i]=Math.floor(Math.random()*256);return x;}};g.getRandomValues(a);for(let i=0;i<6;i++)s+=CODE_CHARS[a[i]%CODE_CHARS.length];return s;}
+/* compara dois resultados pela métrica do desafio (true se 'a' é melhor que 'b') */
+function metricBetter(a,b,m){if(m==="hf")return (a.hf||0)>(b.hf||0);if(m==="total")return (a.total||1e9)<(b.total||1e9);return (a.first==null?1e9:a.first)<(b.first==null?1e9:b.first);}
+
+/* ---- FILA OFFLINE (DB.outbox): resultado salvo local sempre; sobe quando há rede ---- */
+function queueResult(code,metric,result){DB.outbox.push({code,metric,result});save();}
+async function flushOutbox(){if(!navigator.onLine||!fb.ready||!fb.uid||!DB.outbox.length)return;
+ for(const item of DB.outbox.slice()){try{await pushResult(item.code,item.metric,Object.assign({},item.result,{uid:fb.uid}));DB.outbox=DB.outbox.filter(x=>x!==item);save();}catch(e){item.tries=(item.tries||0)+1;if(item.tries>=5){item.failed=true;DB.outbox=DB.outbox.filter(x=>x!==item);}/* v7 B3: após 5 falhas sai da fila ativa (sem retry eterno) */save();}}}
+/* grava o melhor-por-uid via transação (idempotente: reenviar não duplica) */
+async function pushResult(code,metric,r){const ref=fb.db.collection("challenges").doc(code).collection("results").doc(fb.uid);
+ await fb.db.runTransaction(async tx=>{const snap=await tx.get(ref);if(snap.exists){const cur=snap.data();if(!metricBetter(r,cur,metric))return;}tx.set(ref,r);});}
+/* envia o resultado de um desafio online (enfileira sempre; tenta subir já se houver rede) */
+async function submitOnlineResult(ch,sess){const r={uid:fb.uid||null,name:onlineName(),total:sess.total,first:sess.first,hf:sess.hf,acc:sess.acc,nShots:sess.nShots,weapon:sess.weapon,cal:sess.cal,date:sess.date,splits:sess.splits||[]};
+ queueResult(ch.code,ch.metric,r);if(await ensureOnline()){flushOutbox();setPresence(ch.code,"terminou");}}
+/* presença ao vivo (best-effort) */
+async function setPresence(code,status){if(!fb.ready||!fb.uid)return;try{await fb.db.collection("challenges").doc(code).collection("presence").doc(fb.uid).set({name:onlineName(),status,updatedAt:Date.now()});}catch(e){}}
+
+/* ---- RANKING ONLINE EM TEMPO REAL (onSnapshot) ---- */
+function detachChal(){chalUnsub.forEach(u=>{try{u();}catch(e){}});chalUnsub=[];}
+
+/* =============================================================================
+   FASE 2 — Progresso, Sessão, Drills, Criar/editar drill, Ajuste de captação,
+   Permissão do microfone e Modo Laboratório.
+   ============================================================================= */
+Object.assign(S,{period:"30",pcat:"all",report:"Resumo",sheet:"",detId:null,detEdit:false,dq:"",dfilter:"all",nd:null,micFrom:"step2",micErr:false,micDevs:[],histMax:40});
+
+/* ---------- ganchos de entrada/saída de tela (mic e ranking têm recursos vivos) ---------- */
+const _render=render;let _prevScr=null;
+render=function(){_render();const cur=S.screen,prev=_prevScr;_prevScr=cur;
+  if(prev==="mic"&&cur!=="mic")closeMic();
+  if(cur==="mic"&&prev!=="mic")openMic();
+  if(prev==="ranking"&&cur!=="ranking"&&typeof detachChal==="function")detachChal();
+  if(cur==="ranking"&&prev!=="ranking"&&typeof attachRanking==="function")attachRanking();
+  if(cur==="mic")paintMicStatic();
+  if(cur==="ranking"&&typeof paintRanking==="function")paintRanking();
+};
+
+/* =============================================================================
+   PROGRESSO — período, categoria e relatório; tudo recalculado do histórico
+   ============================================================================= */
+const REPORTS={all:["Resumo","Evolução","Consistência"],velocidade:["Resumo","Evolução","1º tiro","Splits"],"precisão":["Resumo","Zonas","Grupos"],recarga:["Resumo","Recargas","Splits"],livre:["Resumo","Evolução"]};
+const REPORT_HINT={"Resumo":"lista de sessões e melhor marca","Evolução":"como o hit factor mudou sessão a sessão","Consistência":"quanto seu ritmo varia por drill","1º tiro":"tempo até o primeiro disparo","Splits":"intervalo entre tiros, por posição","Zonas":"onde os tiros caíram e quantos pontos","Grupos":"precisão por sessão","Recargas":"tempo da troca de carregador"};
+const PERIODS=[["7","7 d"],["30","30 d"],["90","90 d"],["all","Tudo"]];
+const catLabel=k=>(CATS.find(c=>c.k===k)||{}).l||"Todos";
+const dshort=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"short"}).replace(".","");
+const avgOf=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+const sdOf=a=>{if(a.length<2)return null;const m=avgOf(a);return Math.sqrt(a.reduce((x,y)=>x+(y-m)*(y-m),0)/a.length);};
+const isScored=s=>s.scored!==false&&s.hf>0;
+
+/* sessões do atirador ativo, no período e categoria escolhidos, em ordem cronológica */
+function progSessions(){const days={"7":7,"30":30,"90":90}[S.period],now=Date.now();
+  return DB.sessions.filter(s=>s.profileId===DB.currentProfile&&(S.pcat==="all"||((drillById(s.drillId)||{}).tag||"livre")===S.pcat)&&(!days||now-new Date(s.date).getTime()<=days*864e5))
+    .sort((a,b)=>new Date(a.date)-new Date(b.date));}
+/* tempo da recarga: se o drill marca "recarga após o tiro N", usa o split exato; senão, o maior split */
+function reloadSplit(s){const d=drillById(s.drillId)||{},sp=s.splits||[];if(!sp.length)return null;if(d.reload&&d.after>0&&sp[d.after-1]!=null)return sp[d.after-1];return Math.max(...sp);}
+
+/* monta KPIs + tabela + nota de cada relatório (regras do handoff) */
+function buildReport(arr){const R=S.report,T2={kpis:[],head:[],rows:[],note:""};const sc=arr.filter(isScored);
+  if(R==="Evolução"){const hf=sc.map(s=>s.hf);T2.kpis=[[avgOf(hf),"HF médio"],[hf.length?Math.max(...hf):null,"Melhor"],[hf.length>1?hf[hf.length-1]-hf[0]:null,"Tendência",true]];
+    T2.head=["Sessão","HF","Δ","Tempo"];T2.rows=sc.slice().reverse().map((s,i,a)=>{const prev=a[i+1],d=prev?s.hf-prev.hf:null;return [dshort(s.date)+" · "+esc(s.drillName),fmt(s.hf,2),d==null?dash:'<span style="color:'+(d>=0?"var(--ok)":"var(--bad)")+'">'+(d>=0?"+":"")+fmt(d,2)+'</span>',fmt(s.total,2)];});
+    T2.note="Δ compara com a sessão anterior dentro do mesmo filtro. Verde quando o hit factor subiu.";}
+  else if(R==="Consistência"){const g={};sc.forEach(s=>{(g[s.drillName]=g[s.drillName]||[]).push(s.hf);});const ks=Object.keys(g);const devs=ks.map(k=>sdOf(g[k])).filter(x=>x!=null);
+    T2.kpis=[[avgOf(devs),"Desvio médio"],[ks.length,"Drills",false,true],[sc.length,"Sessões",false,true]];T2.head=["Drill","Sessões","HF méd.","Desvio"];
+    T2.rows=ks.map(k=>{const d=sdOf(g[k]);return [esc(k),g[k].length,fmt(avgOf(g[k]),2),d==null?dash:'<span style="color:'+(d<0.4?"var(--ok)":"var(--bad)")+'">'+fmt(d,2)+'</span>'];});
+    T2.note="Desvio-padrão do hit factor entre as sessões de cada drill. Quanto menor, mais repetível o seu ritmo.";}
+  else if(R==="1º tiro"){const fs=arr.filter(s=>s.first>0),v=fs.map(s=>s.first),best=v.length?Math.min(...v):null;
+    T2.kpis=[[best,"Melhor"],[avgOf(v),"Média"],[fs.length,"Sessões",false,true]];T2.head=["Sessão","1º tiro","Δ melhor","HF"];
+    T2.rows=fs.slice().reverse().map(s=>[dshort(s.date)+" · "+esc(s.drillName),fmt(s.first,2),s.first===best?'<span style="color:var(--ok)">melhor</span>':"+"+fmt(s.first-best,2),isScored(s)?fmt(s.hf,2):dash]);
+    T2.note="Tempo do beep até o primeiro disparo. Δ é a distância para o seu melhor 1º tiro no período.";}
+  else if(R==="Splits"){const pos=[];arr.forEach(s=>(s.splits||[]).forEach((v,i)=>{(pos[i]=pos[i]||[]).push(v);}));const all=[].concat(...pos.filter(Boolean));
+    T2.kpis=[[avgOf(all),"Split médio"],[all.length?Math.min(...all):null,"Melhor"],[all.length?Math.max(...all):null,"Pior"]];T2.head=["Posição","Média","Melhor","Pior"];
+    T2.rows=pos.map((a,i)=>a?[(i+1)+"→"+(i+2),fmt(avgOf(a),2),fmt(Math.min(...a),2),fmt(Math.max(...a),2)]:null).filter(Boolean);
+    T2.note="Intervalo entre tiros agrupado pela posição na série. O 1º tiro (saque) fica de fora.";}
+  else if(R==="Zonas"){const z={a:0,c:0,d:0,ms:0};arr.forEach(s=>{if(s.zones){z.a+=s.zones.a||0;z.c+=s.zones.c||0;z.d+=s.zones.d||0;z.ms+=s.zones.ms||0;}});const n=z.a+z.c+z.d+z.ms,pts=z.a*5+z.c*3+z.d-z.ms*10;
+    T2.kpis=[[n?(n-z.ms)/n*100:null,"Precisão",false,false,"%"],[pts,"Pontos",false,true],[z.ms,"Misses",false,true]];T2.head=["Zona","Tiros","%","Pontos"];
+    T2.rows=[["A",z.a,5],["C",z.c,3],["D",z.d,1],["Miss",z.ms,-10]].map(([l,c,p])=>[l,c,n?fmt(c/n*100,0)+"%":dash,(c*p>0?"+":"")+c*p]);
+    T2.note="Soma das zonas IPSC das sessões pontuadas por zona: A +5, C +3, D +1, miss −10.";}
+  else if(R==="Grupos"){T2.kpis=[[arr.length,"Sessões",false,true],[avgOf(sc.map(s=>s.hf)),"HF médio"],[(()=>{const f=arr.map(s=>s.first).filter(x=>x>0);return f.length?Math.min(...f):null;})(),"Melhor 1º"]];
+    T2.head=["Sessão","Tiros","Precisão","HF"];T2.rows=arr.slice().reverse().map(s=>[dshort(s.date)+" · "+esc(s.drillName),s.nShots||0,s.scored!==false&&(s.hits+s.miss)>0?fmt(s.acc,0)+"%":dash,isScored(s)?fmt(s.hf,2):dash]);
+    T2.note="Precisão = tiros no alvo ÷ tiros pontuados, sessão a sessão.";}
+  else if(R==="Recargas"){const rs=arr.map(s=>({s,r:reloadSplit(s)})).filter(x=>x.r!=null),v=rs.map(x=>x.r);
+    T2.kpis=[[v.length?Math.min(...v):null,"Melhor recarga"],[avgOf(v),"Média"],[rs.length,"Sessões",false,true]];T2.head=["Sessão","Recarga","Tempo","HF"];
+    T2.rows=rs.slice().reverse().map(x=>[dshort(x.s.date)+" · "+esc(x.s.drillName),fmt(x.r,2),fmt(x.s.total,2),isScored(x.s)?fmt(x.s.hf,2):dash]);
+    T2.note="Usa o split da posição marcada no drill (\"recarga após o tiro N\"). Drills sem essa marcação usam o maior split da série como estimativa.";}
+  return T2;}
+/* número-herói do relatório: valor atual + variação (último vs média dos anteriores) */
+function heroFor(arr){const R=S.report,sc=arr.filter(isScored);let series,label,lowerBetter=false,unit="";
+  if(R==="1º tiro"){series=arr.filter(s=>s.first>0).map(s=>s.first);label="1º tiro médio";lowerBetter=true;unit=" s";}
+  else if(R==="Splits"){series=arr.map(s=>avgOf(s.splits||[])).filter(x=>x!=null);label="split médio";lowerBetter=true;unit=" s";}
+  else if(R==="Recargas"){series=arr.map(reloadSplit).filter(x=>x!=null);label="recarga média";lowerBetter=true;unit=" s";}
+  else if(R==="Zonas"||R==="Grupos"){series=arr.filter(s=>s.scored!==false&&(s.hits+s.miss)>0).map(s=>s.acc);label="precisão média";unit="%";}
+  else{series=sc.map(s=>s.hf);label="hit factor médio";}
+  const v=avgOf(series);let delta=null;if(series.length>1){const last=series[series.length-1],prev=avgOf(series.slice(0,-1));delta=last-prev;}
+  return {label,v,delta,lowerBetter,unit,dec:unit==="%"?0:2};}
+
+SCREENS.progress=()=>{
+  const arr=progSessions(),list=REPORTS[S.pcat]||REPORTS.all;if(list.indexOf(S.report)<0)S.report="Resumo";
+  const anyMine=DB.sessions.some(s=>s.profileId===DB.currentProfile);
+  const periodBtns='<div style="display:flex;gap:8px;padding:0 18px 12px">'+PERIODS.map(([k,l])=>'<button class="chip'+(S.period===k?" on":"")+'" data-a="period" data-v="'+k+'" style="flex:1;padding:0">'+l+'</button>').join("")+'</div>';
+  let content;
+  if(!anyMine)content='<div class="empty" style="margin:0 18px"><div style="font:600 18px var(--fb);color:var(--t1);padding-bottom:6px">Nenhum treino ainda</div>Cada série salva aparece aqui com hit factor, tempos e zonas.</div><div style="padding:12px 18px"><button class="btn p" data-a="flow" style="width:100%">Fazer o primeiro treino</button></div>';
+  else if(!arr.length)content='<div class="empty" style="margin:0 18px"><div style="font:600 18px var(--fb);color:var(--t1);padding-bottom:6px">Nada neste filtro</div>Nenhuma sessão de '+catLabel(S.pcat).toLowerCase()+' em '+(S.period==="all"?"todo o histórico":"últimos "+S.period+" dias")+'.</div><div style="padding:12px 18px"><button class="btn" data-a="progReset" style="width:100%">Ver tudo</button></div>';
+  else{
+    const h=heroFor(arr),hfBars=arr.filter(isScored).slice(-24),mx=Math.max(0.01,...hfBars.map(s=>s.hf));
+    const good=h.delta==null?null:(h.lowerBetter?h.delta<=0:h.delta>=0);
+    const hero='<div class="card" style="margin:0 18px 12px;width:auto;padding:15px;flex:none"><div class="lbl" style="color:var(--acc)">'+esc(S.report)+' · '+h.label+'</div>'
+      +'<div class="split" style="align-items:flex-end;padding-top:6px"><div style="font:700 40px var(--fm);line-height:1.05;color:var(--acc)">'+(h.v!=null?fmt(h.v,h.dec)+h.unit:dash)+'</div>'
+      +'<div style="text-align:right">'+(h.delta!=null?'<div class="mono" style="font-weight:700;font-size:15px;color:'+(good?"var(--ok)":"var(--bad)")+'">'+(h.delta>=0?"▲ +":"▼ ")+fmt(h.delta,h.dec)+h.unit+'</div>':'')+'<div class="sub" style="font-size:12px">'+plural(arr.length,"sessão","sessões")+' · '+(S.period==="all"?"tudo":S.period+" d")+'</div></div></div>'
+      +(hfBars.length?'<div style="display:flex;align-items:flex-end;gap:3px;height:46px;padding-top:12px" aria-hidden="true">'+hfBars.map((s,i)=>'<i style="flex:1;border-radius:2px;height:'+Math.max(6,s.hf/mx*100)+'%;background:'+(i===hfBars.length-1?"var(--acc)":"var(--bar)")+'"></i>').join("")+'</div>':'')+'</div>';
+    const sel='<div style="display:flex;gap:10px;padding:0 18px 12px;flex:none">'
+      +'<button class="card click" data-a="sheet" data-v="cat" style="flex:1;padding:10px 13px"><div class="lbl" style="font-size:10px">Categoria</div><div class="split"><span style="font:600 15px var(--fb)">'+catLabel(S.pcat)+'</span><span style="color:var(--t3)">▾</span></div></button>'
+      +'<button class="card click" data-a="sheet" data-v="rep" style="flex:1;padding:10px 13px"><div class="lbl" style="font-size:10px">Relatório</div><div class="split"><span style="font:600 15px var(--fb)">'+esc(S.report)+'</span><span style="color:var(--t3)">▾</span></div></button></div>';
+    let body;
+    if(S.report==="Resumo"){const rows=arr.slice().reverse().slice(0,S.histMax);
+      body='<div style="display:flex;flex-direction:column;gap:9px;padding:0 18px 12px">'+rows.map(s=>'<button class="card click split" data-a="detail" data-v="'+esc(s.id)+'" style="padding:12px 14px"><div style="min-width:0"><div style="font:600 15.5px var(--fb)">'+esc(s.drillName)+(s.blockSize>1?' <span class="sub" style="font-size:12px">rep '+s.repIndex+'/'+s.blockSize+'</span>':'')+'</div><div class="sub" style="font-size:12.5px">'+dshort(s.date)+' · '+fnum(s.dist)+' m · '+esc(s.cal||"")+(s.scored===false?' · não pontuado':'')+'</div></div><div class="mono" style="font-weight:700;font-size:17px;color:'+(isScored(s)?"var(--acc)":"var(--t3)")+'">'+(isScored(s)?fmt(s.hf,2):dash)+'</div></button>').join("")
+        +(arr.length>S.histMax?'<button class="dash" data-a="more">Mostrar mais ('+(arr.length-S.histMax)+')</button>':'')+'</div>';}
+    else{const R=buildReport(arr);
+      body='<div class="kpis">'+R.kpis.map(([v,l,signed,int,suf])=>kpi(v==null?dash:(int?String(Math.round(v)):(signed&&v>0?"+":"")+fmt(v,suf==="%"?0:2)+(suf||"")),l,false,signed&&v!=null?(v>=0?"var(--ok)":"var(--bad)"):"")).join("")+'</div>'
+        +'<div class="tbl"><div class="tr h">'+R.head.map(x=>'<span>'+x+'</span>').join("")+'</div>'+(R.rows.length?R.rows.map(r=>'<div class="tr">'+r.map(x=>'<span>'+x+'</span>').join("")+'</div>').join(""):'<div class="tr"><span class="sub">Sem dados suficientes para este relatório.</span></div>')+'</div>'
+        +'<div class="note">'+R.note+'</div>';}
+    content=hero+sel+body;}
+  return '<div class="scr">'+hdr(B.menu,"Progresso",B.home)+periodBtns+'<div class="body" style="padding:0;gap:0">'+content+'</div>'
+    +'<div class="foot"><button class="btn" data-a="go" data-v="settings">Exportar</button><button class="btn p x" data-a="flow">Treinar agora</button></div></div>'
+    +(S.sheet?pickSheet():'');
+};
+/* folha de escolha (categoria ou relatório), com uma linha de explicação e ✓ na atual */
+function pickSheet(){const isCat=S.sheet==="cat";const opts=isCat?CATS.map(c=>[c.k,c.l,"relatórios: "+REPORTS[c.k].join(", ")]):(REPORTS[S.pcat]||REPORTS.all).map(r=>[r,r,REPORT_HINT[r]]);const cur=isCat?S.pcat:S.report;
+  return '<div class="ovl" role="dialog" aria-modal="true" aria-label="'+(isCat?"Categoria":"Relatório")+'"><button class="scrim" data-a="sheetClose" aria-label="Fechar"></button><div class="sheet"><div class="grab"></div><div class="lbl">'+(isCat?"Categoria":"Relatório")+'</div>'
+    +opts.map(([k,l,hint])=>'<button class="card click split" data-a="'+(isCat?"pcat":"report")+'" data-v="'+esc(k)+'" style="padding:12px 14px'+(k===cur?";border-color:var(--acc)":"")+'"><div><div style="font:600 16px var(--fb)">'+esc(l)+'</div><div class="sub" style="font-size:12.5px">'+esc(hint)+'</div></div><span style="color:var(--acc);font-weight:700">'+(k===cur?"✓":"")+'</span></button>').join("")+'</div></div>';}
+
+Object.assign(ACT,{
+  period:v=>{S.period=v;S.histMax=40;render();},
+  sheet:v=>{S.sheet=v;render();},sheetClose:()=>{S.sheet="";render();},
+  pcat:v=>{S.pcat=v;S.sheet="";if((REPORTS[v]||[]).indexOf(S.report)<0)S.report="Resumo";render();},
+  report:v=>{S.report=v;S.sheet="";render();},
+  progReset:()=>{S.pcat="all";S.period="all";S.report="Resumo";render();},
+  more:()=>{S.histMax+=40;render();},
+  detail:v=>{S.detId=v;S.detEdit=false;go("detail");}
+});
+
+/* =============================================================================
+   SESSÃO — detalhe com edição de tiros, (re)pontuação e exclusão
+   ============================================================================= */
+function curSess(){return DB.sessions.find(s=>s.id===S.detId);}
+/* tempos absolutos reconstruídos a partir de 1º tiro + splits */
+function sessTimes(s){if(s.first==null)return [];const t=[s.first];(s.splits||[]).forEach(x=>t.push(+(t[t.length-1]+x).toFixed(3)));return t;}
+function sessionInsight(s){const sp=s.splits||[];if(sp.length<2)return sp.length?"Um único split: "+fmt(sp[0],2)+" s entre o 1º e o 2º tiro.":"Com um tiro só, o que conta é o tempo até o primeiro disparo.";
+  const worst=Math.max(...sp),i=sp.indexOf(worst),m=avgOf(sp);return "Seu pior split foi "+fmt(worst,2)+" s (tiro "+(i+1)+"→"+(i+2)+") contra "+fmt(m,2)+" s de média.";}
+SCREENS.detail=()=>{const s=curSess();if(!s){S.screen="progress";return SCREENS.progress();}
+  const dt=new Date(s.date),times=sessTimes(s),r={shots:times,zones:s.shotZones||null};
+  const meta=dshort(s.date)+" · "+dt.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+" · "+fnum(s.dist)+" m · "+esc(s.cal||"")+(s.smode==="ipsc"&&s.zones?" · IPSC":"")+(s.blockSize>1?" · rep "+s.repIndex+"/"+s.blockSize:"");
+  const ch=s.challengeId?DB.challenges.find(c=>c.id===s.challengeId):null;
+  let shotsBox;
+  if(S.detEdit){shotsBox='<div class="rows" style="gap:6px">'+(times.length?times.map((t,i)=>'<div class="row split" style="gap:9px"><span class="n">'+(i+1)+'</span><span style="flex:1">'+fmt(t,2)+' s</span><button class="hb" data-a="shotDel" data-v="'+i+'" aria-label="Remover tiro '+(i+1)+'" style="width:40px;height:40px;color:var(--bad)">✕</button></div>').join(""):'<div class="sub">Nenhum tiro.</div>')+'</div>'
+      +'<div style="display:flex;gap:8px;padding-top:10px"><input class="inp" id="shotAdd" inputmode="decimal" placeholder="tempo do tiro, ex: 2,35" aria-label="Tempo do tiro em segundos"><button class="btn p none" data-a="shotAdd" style="min-height:44px;border-radius:10px;font-size:14px">Adicionar</button></div>'
+      +'<div class="sub" style="font-size:12px;padding-top:6px">Remova falsos disparos ou inclua um tiro que o microfone perdeu. Tempos contados a partir do beep.</div>';}
+  else shotsBox='<div class="rows" style="gap:9px">'+shotRows(r,true)+'</div>';
+  return '<div class="scr">'+hdr(B.back("progress","Voltar ao progresso"),"Sessão",B.home)
+    +'<div class="ttl" style="padding-top:0">'+esc(s.drillName)+'<div class="sub">'+meta+(ch?' · desafio '+esc(ch.name):'')+'</div></div>'
+    +'<div class="kpis">'+kpi(fmt(s.total,2),"Total")+kpi(s.first!=null?fmt(s.first,2):dash,"1º tiro")+kpi(isScored(s)?fmt(s.hf,2):dash,"Hit factor",true)+'</div>'
+    +'<div class="body" style="padding:0;gap:0">'
+    +'<div class="card" style="margin:0 18px 13px;width:auto"><div class="split"><div class="lbl">'+(S.detEdit?"Editar tiros":"Tiro a tiro")+'</div><button class="link" data-a="detEdit" style="padding:0">'+(S.detEdit?"Concluir":"Editar tiros")+'</button></div>'+shotsBox+'</div>'
+    +(s.scored===false?'<div class="card split" style="margin:0 18px 13px;width:auto;border-color:var(--acc)"><div><div style="font:600 15px var(--fb)">Sem pontuação</div><div class="sub">Pontue as zonas para entrar nas médias de HF e precisão.</div></div><button class="btn p none" data-a="rescore" style="min-height:48px;border-radius:12px;font-size:15px">Pontuar</button></div>'
+      :'<div class="card split" style="margin:0 18px 13px;width:auto"><div><div class="lbl">Zonas</div><div class="sub" style="padding-top:4px">'+(s.zones?"A ×"+(s.zones.a||0)+" · C ×"+(s.zones.c||0)+" · D ×"+(s.zones.d||0)+" · miss ×"+(s.zones.ms||0)+" · "+s.points+" pts":(s.hits||0)+" acertos · "+(s.miss||0)+" erros")+'</div></div><button class="link" data-a="rescore" style="padding:0">Repontuar</button></div>')
+    +'<div class="note">'+sessionInsight(s)+'</div></div>'
+    +'<div class="foot"><button class="btn danger" data-a="sessDel">Excluir</button><button class="btn p x" data-a="repeat">Repetir drill</button></div></div>';
+};
+/* aplica uma nova lista de tiros à sessão e recalcula tudo que depende do tempo */
+function applyShots(s,times){times=times.slice().sort((a,b)=>a-b);let zoneReset=false;
+  s.first=times.length?+times[0].toFixed(3):null;s.splits=times.slice(1).map((t,i)=>+(t-times[i]).toFixed(3));s.nShots=times.length;
+  if(times.length)s.total=+times[times.length-1].toFixed(3);
+  if(s.shotZones&&s.shotZones.length!==times.length){s.shotZones=null;s.zones=null;s.hits=0;s.miss=0;s.points=0;s.acc=0;s.hf=0;s.scored=false;zoneReset=true;}
+  else if(s.scored!==false)s.hf=s.total>0?+(Math.max(0,s.points||0)/s.total).toFixed(3):0;
+  s.corr=+(s.total+(s.miss||0)*((drillById(s.drillId)||{}).pen||0)).toFixed(3);
+  save();resubmit(s);return zoneReset;}
+/* sessão de desafio online editada: reenvia ao ranking (v7 B4) */
+function resubmit(s){const ch=s.challengeId?DB.challenges.find(c=>c.id===s.challengeId&&c.online):null;if(ch&&typeof submitOnlineResult==="function")submitOnlineResult(ch,s);}
+/* re-pontuar: reaproveita a tela de pontuação com os tiros da sessão */
+function rescoreSession(s){const times=sessTimes(s);if(!times.length){toast("Sem tiros para pontuar — adicione em Editar tiros");return;}
+  const d=drillById(s.drillId)||{id:s.drillId,name:s.drillName,shots:times.length,par:0,pen:0};
+  T={editSession:s,drill:d,challenge:null,gun:s.weapon,cal:s.cal,dist:s.dist,reps:1,rest:0,blockId:null,rep:1,runs:[{rep:1,shots:times,total:s.total,zones:null}],restLeft:0,scoreIdx:0,zones:[],queue:[]};
+  beginScoring();}
+function applyRescore(){const s=T.editSession,r=T.runs[0],c=calc(r);T=null;
+  if(!c.scored){go("detail");return;} /* "Pontuar depois": nada muda (v7 B8) */
+  Object.assign(s,{smode:"ipsc",zones:{a:c.a,c:c.c,d:c.d,ms:c.m},shotZones:r.zones.slice(),hits:c.hits,miss:c.miss,points:c.points,acc:+c.acc.toFixed(1),hf:+c.hf.toFixed(3),corr:+(s.total+c.miss*((drillById(s.drillId)||{}).pen||0)).toFixed(3),scored:true});
+  save();resubmit(s);go("detail");toast("Pontuação salva");}
+Object.assign(ACT,{
+  detEdit:()=>{S.detEdit=!S.detEdit;render();},
+  shotDel:v=>{const s=curSess();if(!s)return;ask("Remover o tiro "+(+v+1)+"?","Tempos, splits e hit factor são recalculados.","Remover",()=>{const t=sessTimes(s);t.splice(+v,1);const z=applyShots(s,t);render();toast(z?"Tiro removido · pontuação zerada, pontue de novo":"Tiro removido");},true);},
+  shotAdd:()=>{const s=curSess(),el=$("#shotAdd");if(!s||!el)return;const t=parseFloat(String(el.value).replace(",","."));if(!isFinite(t)||t<=0||t>600){toast("Escreva um tempo válido em segundos");return;}
+    const z=applyShots(s,sessTimes(s).concat([t]));render();toast(z?"Tiro adicionado · pontuação zerada, pontue de novo":"Tiro adicionado");},
+  rescore:()=>{const s=curSess();if(s)rescoreSession(s);},
+  sessDel:()=>{const s=curSess();if(!s)return;ask("Excluir esta sessão?",esc(s.drillName)+" de "+dshort(s.date)+" sai do histórico deste aparelho.","Excluir",()=>{DB.sessions=DB.sessions.filter(x=>x.id!==s.id);save();go("progress");toast("Sessão excluída");},true);},
+  repeat:()=>{const s=curSess();if(!s)return;if(!drillById(s.drillId)){toast("Esse drill não existe mais na biblioteca");return;}pickDrill(s.drillId);S.dist=s.dist||S.dist;S.reps=1;
+    if(GUNS.indexOf(s.weapon)>=0){DB.settings.gun=s.weapon;DB.settings.cal=s.cal;ensureGear();save();}go("step2");}
+});
+
+/* =============================================================================
+   DRILLS — busca + categoria; toque treina, "editar" abre o formulário
+   ============================================================================= */
+SCREENS.drills=()=>{const q=S.dq.trim().toLowerCase();
+  const list=DB.drills.filter(d=>(S.dfilter==="all"||d.tag===S.dfilter)&&(!q||d.name.toLowerCase().indexOf(q)>=0));
+  return '<div class="scr">'+hdr(B.menu,"Drills · "+DB.drills.length,'<button class="hb" data-a="newDrill" aria-label="Criar drill">+</button>')
+    +'<div style="padding:0 18px 10px"><input class="inp" id="dq" value="'+esc(S.dq)+'" placeholder="Buscar drill" aria-label="Buscar drill" style="width:100%;border:1px solid var(--ctl);border-radius:12px;padding:12px 14px;font:400 15px var(--fb)"></div>'
+    +'<div class="chips">'+CATS.map(c=>'<button class="chip'+(S.dfilter===c.k?" on":"")+'" data-a="dfilter" data-v="'+c.k+'">'+c.l+'</button>').join("")+'</div>'
+    +'<div class="body" style="gap:10px" id="dlist">'+drillCards(list)+'</div><div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
+function drillCards(list){return list.length?list.map(d=>'<div class="card click" data-a="drillTrain" data-v="'+esc(d.id)+'" role="button" tabindex="0" style="padding:14px"><div class="split" style="align-items:flex-start"><div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="nm">'+esc(d.name)+'</span><span style="border:1px solid var(--ctl);border-radius:6px;padding:1px 7px;font:700 10px var(--fc);letter-spacing:.12em;text-transform:uppercase;color:var(--t3)">'+catLabel(d.tag)+'</span></div><div class="sub" style="font-size:13px;padding-top:2px">'+drillMeta(d)+'</div></div><button class="link" data-a="drillEdit" data-v="'+esc(d.id)+'" style="padding:4px 0 4px 10px;flex:none">editar</button></div></div>').join("")
+  :'<div class="empty">Nada encontrado. Ajuste a busca ou o filtro.</div>';}
+document.addEventListener("input",e=>{if(e.target&&e.target.id==="dq"){S.dq=e.target.value;const l=$("#dlist");if(l){const q=S.dq.trim().toLowerCase();l.innerHTML=drillCards(DB.drills.filter(d=>(S.dfilter==="all"||d.tag===S.dfilter)&&(!q||d.name.toLowerCase().indexOf(q)>=0)));}}});
+document.addEventListener("keydown",e=>{const el=e.target;if(e.key==="Enter"&&el&&el.getAttribute&&el.getAttribute("role")==="button"&&el.dataset&&el.dataset.a){e.preventDefault();el.click();}if(e.key==="Enter"&&el&&el.id==="shotAdd")ACT.shotAdd();});
+Object.assign(ACT,{
+  dfilter:v=>{S.dfilter=v;render();},
+  drillTrain:v=>{pickDrill(v);S.reps=1;go("step2");},
+  drillEdit:v=>{const d=drillById(v);if(!d)return;S.nd={editId:d.id,builtin:!!d.builtin,name:d.name,tag:d.tag||"livre",shots:d.shots||0,dist:d.dist||7,perShot:d.shots>0&&d.par>0?Math.round(d.par/d.shots*100)/100:0,pen:d.pen||0,desc:d.desc||"",target:d.target||"",reload:!!d.reload,after:d.after||1};go("newDrill");},
+  newDrill:()=>{S.nd={editId:null,builtin:false,name:"",tag:"velocidade",shots:3,dist:7,perShot:1,pen:0,desc:"",target:"",reload:false,after:1};go("newDrill");}
+});
+
+/* =============================================================================
+   CRIAR / EDITAR DRILL — "tempo-alvo por tiro" vira par total no dado (d.par)
+   ============================================================================= */
+SCREENS.newDrill=()=>{const n=S.nd;if(!n){S.screen="drills";return SCREENS.drills();}
+  const editing=!!n.editId,maxAfter=Math.max(1,n.shots-1);if(n.after>maxAfter)n.after=maxAfter;
+  const cell=(label,act,val,help)=>'<div class="card" style="padding:12px"><div class="lbl" style="font-size:10.5px">'+label+'</div>'+stepper(act,val,label.toLowerCase())+(help?'<div class="sub" style="font-size:12px;padding-top:7px">'+help+'</div>':'')+'</div>';
+  const preview="Prévia: "+(n.shots>0?plural(n.shots,"tiro","tiros"):"tiros livres")+(n.perShot>0&&n.shots>0?" em até "+fmt(n.perShot,2)+" s cada":"")+", a "+fnum(n.dist)+" m · "+catLabel(n.tag)+(n.reload&&n.shots>1?" · recarga após o tiro "+n.after:"")+(n.pen>0?" · +"+fmt(n.pen,1)+" s por erro":"")+".";
+  return '<div class="scr">'+hdr(B.back("drills","Voltar aos drills"),editing?"Editar drill":"Criar drill",B.home)
+    +'<div class="body">'
+    +'<label class="card" style="display:block"><div class="lbl">Nome</div><input class="inp" id="ndName" value="'+esc(n.name)+'" '+(n.builtin?"disabled ":"")+'placeholder="ex: Saque rápido" style="width:100%;margin-top:8px;font:500 16px var(--fb)'+(n.builtin?";border-color:var(--ctl);color:var(--t3)":"")+'">'+(n.builtin?'<div class="sub" style="font-size:12px;padding-top:6px">Drill de fábrica: o nome não muda, o resto sim.</div>':'')+'</label>'
+    +'<div class="card"><div class="lbl">Categoria</div><div style="display:flex;gap:7px;flex-wrap:wrap;padding-top:9px">'+CATS.filter(c=>c.k!=="all").map(c=>'<button class="chip'+(n.tag===c.k?" on":"")+'" data-a="ndTag" data-v="'+c.k+'">'+c.l+'</button>').join("")+'</div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">'
+      +cell("Tiros","ndShots",n.shots>0?n.shots:"livre","")+cell("Distância (m)","ndDist",fnum(n.dist),"")
+      +cell("Tempo-alvo por tiro","ndPar",n.perShot>0?fmt(n.perShot,2):"0","Quanto cada tiro deveria levar. 0 = sem alvo de tempo.")
+      +cell("Penalidade por erro","ndPen",fmt(n.pen,1),"Segundos somados ao seu tempo por tiro fora do alvo.")+'</div>'
+    +'<label class="card" style="display:block"><div class="lbl">Como executar</div><textarea id="ndDesc" rows="3" placeholder="ex: Saque do coldre, 2 tiros no peito e 1 na cabeça. Arma carregada, mãos na altura dos ombros." style="width:100%;min-height:88px;margin-top:8px;background:var(--bg);border:1px solid var(--ctl);border-radius:10px;padding:11px 12px;font:400 14.5px var(--fb);color:var(--t1);resize:vertical">'+esc(n.desc)+'</textarea><div class="sub" style="font-size:12px;padding-top:6px">Aparece na hora de treinar, antes de você começar.</div></label>'
+    +'<label class="card" style="display:block"><div class="lbl">Alvo recomendado</div><input class="inp" id="ndTarget" list="tgtList" value="'+esc(n.target)+'" placeholder="ex: Silhueta IPSC (A/C/D)" style="width:100%;margin-top:8px;border:1px solid var(--ctl);font:400 14.5px var(--fb)"><datalist id="tgtList"><option>Silhueta IPSC (A/C/D)</option><option>Silhueta IDPA</option><option>Bullseye / B8</option><option>Alvo de pontos 3"</option><option>Aço (popper/plate)</option><option>Silhueta policial (B27)</option><option>Cartão 3x5" + círculo 8"</option></datalist></label>'
+    +'<button class="card split" data-a="ndReload" role="switch" aria-checked="'+n.reload+'"><div><div style="font:500 15px var(--fb)">Tem recarga</div><div class="sub" style="font-size:12.5px">esse split vira "recarga" nos relatórios</div></div><span class="tg'+(n.reload?" on":"")+'"><i></i></span></button>'
+    +(n.reload?(n.shots>1?'<div class="card"><div class="lbl">Recarga após o tiro</div>'+stepper("ndAfter",n.after,"posição da recarga")+'</div>':'<div class="sub" style="padding:0 2px">Precisa de pelo menos 2 tiros para marcar a recarga.</div>'):'')
+    +'<div class="note" style="margin:0">'+preview+'</div>'
+    +(editing&&!n.builtin?'<button class="btn danger" data-a="ndDelete" style="flex:none;min-height:52px">Excluir este drill</button>':'')
+    +'</div><div class="foot"><button class="btn p" data-a="ndSave">'+(editing?"Salvar alterações":"Salvar drill")+'</button></div></div>';
+};
+/* campos de texto do rascunho: guardados sem re-render (mantém o foco) */
+document.addEventListener("input",e=>{const id=e.target&&e.target.id,n=S.nd;if(!n)return;if(id==="ndName")n.name=e.target.value;else if(id==="ndDesc")n.desc=e.target.value;else if(id==="ndTarget")n.target=e.target.value;});
+Object.assign(ACT,{
+  ndTag:v=>{S.nd.tag=v;render();},
+  ndShots:v=>{const n=S.nd;n.shots=Math.max(0,Math.min(50,n.shots+(+v)));render();},
+  ndDist:v=>{const n=S.nd;n.dist=Math.max(1,Math.min(50,Math.round(n.dist)+(+v)));render();},
+  ndPar:v=>{const n=S.nd;n.perShot=Math.max(0,Math.min(10,Math.round((n.perShot+0.25*(+v))*100)/100));render();},
+  ndPen:v=>{const n=S.nd;n.pen=Math.max(0,Math.min(10,n.pen+0.5*(+v)));render();},
+  ndReload:()=>{S.nd.reload=!S.nd.reload;render();},
+  ndAfter:v=>{const n=S.nd;n.after=Math.max(1,Math.min(Math.max(1,n.shots-1),n.after+(+v)));render();},
+  ndSave:()=>{const n=S.nd;const name=(n.name||"").trim();if(!name){toast("Dê um nome ao drill");return;}
+    const data={desc:(n.desc||"").trim(),shots:n.shots,dist:n.dist,par:n.shots>0?Math.round(n.perShot*n.shots*100)/100:0,pen:n.pen,tag:n.tag,userTag:true,target:(n.target||"").trim(),reload:n.reload&&n.shots>1,after:n.reload&&n.shots>1?n.after:0};
+    if(n.editId){const d=drillById(n.editId);if(!d)return;if(!d.builtin)data.name=name;Object.assign(d,data);save();S.nd=null;go("drills");toast("Drill atualizado");}
+    else{const d=Object.assign({id:uid(),builtin:0,name},data);DB.drills.push(d);save();S.nd=null;pickDrill(d.id);go("drills");toast("Drill salvo");}},
+  ndDelete:()=>{const n=S.nd;const d=drillById(n.editId);if(!d||d.builtin)return;ask("Excluir "+d.name+"?","O drill sai da biblioteca. Sessões já salvas continuam no histórico.","Excluir",()=>{DB.drills=DB.drills.filter(x=>x.id!==d.id);if(S.selId===d.id)pickDrill((DB.drills[0]||{}).id);save();S.nd=null;go("drills");toast("Drill excluído");},true);}
+});
+
+/* =============================================================================
+   AJUSTE DE CAPTAÇÃO — mesma lógica da calibração da v7 (detector próprio,
+   isShot com a sensibilidade e o requireClip salvos); só a apresentação muda.
+   Margem em dB: a tela ajusta dB e converte para "sens" (a escala do motor).
+   ============================================================================= */
+let calRAF=null,calDet=null,calHist=[],calCount=0,calOpenTok=0;
+const dbOf=v=>20*Math.log10(Math.max(v,1e-4)); /* dBFS */
+const pctDb=v=>Math.max(0,Math.min(100,(dbOf(v)+60)/60*100)); /* −60..0 dBFS → 0..100% */
+const sensFromDb=db=>Math.max(1,Math.min(99,Math.round(99-(db-6)*98/24)));
+function micAdvice(db){return db<10?"Margem baixa: vizinhos de baia podem disparar falsos.":db>22?"Margem alta: tiros mais fracos podem passar batido.":"Margem equilibrada para a maioria dos stands.";}
+SCREENS.mic=()=>{const s=DB.settings,db=Math.round(marginDb(s.sens));
+  return '<div class="scr">'+hdr(B.back(S.micFrom||"settings","Voltar"),"Ajuste de captação",B.home)
+    +'<div class="body">'
+    +'<div class="sub" style="font-size:14px;color:var(--t2)">Bata uma palma forte. Seus disparos precisam cruzar a linha branca; o fundo, não.</div>'
+    +(S.micErr?'<div class="warn">Microfone indisponível. Libere a permissão no navegador e abra pelo endereço https do Netlify.</div>':'')
+    +'<div class="card" style="background:var(--rec);padding:12px"><div style="position:relative;height:148px;display:flex;align-items:flex-end;gap:2px" id="viz" aria-hidden="true">'+Array.from({length:40},()=>'<i style="flex:1;height:2%;background:var(--bar);border-radius:2px 2px 0 0"></i>').join("")
+      +'<div id="vizTh" style="position:absolute;left:0;right:0;height:0;border-top:2px solid #fff;bottom:50%"></div><div id="vizFl" style="position:absolute;left:0;right:0;height:0;border-top:1.5px dashed var(--t3);bottom:10%"></div></div>'
+      +'<div class="lbl" style="font-size:10px;padding-top:8px">Branca = gatilho · cinza = ruído</div></div>'
+    +'<div class="card"><div class="split"><div class="lbl">Margem de detecção</div><div class="sub" style="font-size:12px">acima do ruído</div></div>'+stepper("micMargin",db+" dB","margem")+'<div class="sub" style="font-size:12.5px;padding-top:8px;color:'+(db<10||db>22?"var(--acc)":"var(--t3)")+'">'+micAdvice(db)+'</div></div>'
+    +'<div style="display:flex;gap:9px">'+kpi('<span id="cDet" style="color:var(--ok)">0</span>',"Detectados")+kpi('<span id="cPk">'+dash+'</span>',"Pico dB")+kpi('<span id="cFl">'+dash+'</span>',"Piso dB")+'</div>'
+    +'<div class="card"><div class="split"><div class="lbl">Janela anti-eco</div><div class="sub" style="font-size:12px">ms</div></div>'+stepper("micEcho",(s.echoBlank||150),"janela anti-eco")+'<div class="sub" style="font-size:12.5px;padding-top:8px">Janela maior ignora mais eco, mas perde splits muito rápidos. Indoor pede janela maior.</div></div>'
+    +'<button class="card split" data-a="micClip" role="switch" aria-checked="'+!!s.requireClip+'"><div><div style="font:500 15px var(--fb)">Exigir impacto forte</div><div class="sub" style="font-size:12.5px">só conta sons que saturam o microfone</div></div><span class="tg'+(s.requireClip?" on":"")+'"><i></i></span></button>'
+    +'<label class="card" style="display:block"><div class="lbl">Dispositivo de áudio</div><select id="micDev" style="width:100%;margin-top:8px;background:var(--bg);color:var(--t1);border:1px solid var(--ctl);border-radius:10px;padding:11px;font:400 14.5px var(--fb)"><option value="">Padrão do aparelho</option>'+S.micDevs.map((d,i)=>'<option value="'+esc(d.deviceId)+'"'+(d.deviceId===s.audioDeviceId?" selected":"")+'>'+esc(d.label||"Microfone "+(i+1))+'</option>').join("")+'</select><div class="sub" id="micProcLine" style="font-size:12.5px;padding-top:8px"></div></label>'
+    +'</div><div class="foot"><button class="btn" data-a="micRelearn">Reaprender</button><button class="btn p x" data-a="go" data-v="'+(S.micFrom||"settings")+'">Concluir</button></div></div>';};
+async function openMic(){const tok=++calOpenTok;calDet=newDetector();calHist=[];calCount=0;
+  const ok=await startMic(DB.settings.audioDeviceId||undefined);if(tok!==calOpenTok||S.screen!=="mic"){stopMic();return;}
+  if(!ok){S.micErr=true;render();return;}S.micErr=false;DB.settings.micGranted=true;save();
+  try{const devs=await navigator.mediaDevices.enumerateDevices();S.micDevs=devs.filter(d=>d.kind==="audioinput");}catch(e){S.micDevs=[];}
+  if(S.screen==="mic")render();
+  const step=()=>{if(S.screen!=="mic"||tok!==calOpenTok)return;const fr=micFrame(),nowS=performance.now()/1000,sens=DB.settings.sens;
+    const th=effThresh(calDet,sens);if(isShot(calDet,fr,sens,nowS,!!DB.settings.requireClip))calCount++;
+    calHist.push({p:fr.peak,hit:fr.peak>=th});if(calHist.length>40)calHist.shift();paintMic(th);calRAF=requestAnimationFrame(step);};step();}
+function closeMic(){calOpenTok++;if(calRAF)cancelAnimationFrame(calRAF);calRAF=null;stopMic();}
+function paintMic(th){const v=$("#viz");if(!v)return;const bars=v.querySelectorAll("i");const off=bars.length-calHist.length;
+  bars.forEach((b,i)=>{const h=calHist[i-off];b.style.height=h?Math.max(2,pctDb(h.p))+"%":"2%";b.style.background=h&&h.hit?"var(--acc)":"var(--bar)";});
+  const t=$("#vizTh"),f=$("#vizFl");if(t)t.style.bottom=pctDb(th)+"%";if(f&&calDet)f.style.bottom=pctDb(calDet.floor)+"%";
+  const last=calHist[calHist.length-1];const cd=$("#cDet"),cp=$("#cPk"),cf=$("#cFl");if(cd)cd.textContent=calCount;if(cp&&last)cp.textContent=Math.round(dbOf(last.p));if(cf&&calDet&&calDet.floor)cf.textContent=Math.round(dbOf(calDet.floor));}
+/* status do processamento que o APARELHO aplicou (alguns ignoram o pedido de desligar) */
+function paintMicStatic(){const el=$("#micProcLine");if(!el)return;const p=micProc;if(!p){el.textContent="";return;}
+  const on=v=>v===true,parts=[];if("autoGainControl"in p)parts.push("ganho automático "+(on(p.autoGainControl)?"LIGADO":"desligado"));if("noiseSuppression"in p)parts.push("redução de ruído "+(on(p.noiseSuppression)?"LIGADA":"desligada"));
+  const bad=on(p.autoGainControl)||on(p.noiseSuppression)||on(p.echoCancellation);
+  el.style.color=bad?"var(--acc)":"var(--t3)";el.textContent=parts.length?(bad?"⚠ ":"✓ ")+"Este aparelho: "+parts.join(" · ")+(bad?". Ele ignorou o pedido de desligar; \"exigir impacto forte\" ajuda.":"."):"O aparelho não informa o que aplica no áudio.";}
+document.addEventListener("change",async e=>{if(e.target&&e.target.id==="micDev"){DB.settings.audioDeviceId=e.target.value;save();closeMic();S.micErr=false;openMic();}});
+Object.assign(ACT,{
+  micMargin:v=>{const db=Math.max(6,Math.min(30,Math.round(marginDb(DB.settings.sens))+(+v)));DB.settings.sens=sensFromDb(db);save();render();},
+  micEcho:v=>{DB.settings.echoBlank=Math.max(60,Math.min(500,(DB.settings.echoBlank||150)+10*(+v)));save();render();},
+  micClip:()=>{DB.settings.requireClip=!DB.settings.requireClip;save();calDet=newDetector();render();},
+  micRelearn:()=>{calDet=newDetector();calHist=[];calCount=0;toast("Piso de ruído reaprendido");}
+});
+/* abrir o ajuste lembra de onde veio (Concluir volta para lá) */
+const _goMic=ACT.go;ACT.go=v=>{if(v==="mic"&&S.screen!=="mic")S.micFrom=S.screen==="noshot"?"step2":S.screen;_goMic(v);};
+
+/* =============================================================================
+   PERMISSÃO DO MICROFONE — antes de ligar a detecção pela primeira vez
+   ============================================================================= */
+SCREENS.micperm=()=>'<div class="scr"><div class="body" style="justify-content:center;align-items:center;text-align:center;gap:14px;padding-top:20px">'
+  +'<div style="width:82px;height:82px;border-radius:22px;border:2px solid var(--acc);display:flex;align-items:center;justify-content:center;font-size:34px;color:var(--acc)">🎙</div>'
+  +'<div style="font:600 24px var(--fb)">Liberar o microfone</div>'
+  +'<div style="font:400 14.5px var(--fb);color:var(--t2);line-height:1.5;max-width:300px">O Cadência ouve os disparos para marcar cada tiro. Nada é enviado: o áudio é analisado no próprio celular e descartado.</div>'
+  +'<div class="card" style="text-align:left;display:flex;flex-direction:column;gap:9px">'+["Tempo de cada tiro sem tocar na tela","Splits e hit factor calculados sozinhos","Funciona offline, no stand"].map(t=>'<div style="display:flex;gap:10px;font:400 14px var(--fb);color:var(--t2)"><span style="color:var(--ok)">✓</span>'+t+'</div>').join("")+'</div></div>'
+  +'<div class="foot" style="flex-direction:column"><button class="btn p" data-a="micAllow" style="flex:none">Permitir microfone</button><button class="btn" data-a="micDry" style="flex:none;min-height:52px">Continuar em dry-fire</button></div></div>';
+Object.assign(ACT,{
+  micToggle:()=>{if(!micOn()&&!DB.settings.micGranted){go("micperm");return;}const on=!micOn();DB.settings.mic=on;DB.settings.dry=!on;save();render();},
+  micAllow:async()=>{const ok=await startMic(DB.settings.audioDeviceId||undefined);stopMic();
+    if(ok){DB.settings.micGranted=true;DB.settings.mic=true;DB.settings.dry=false;save();go(S.onbStep!=null&&S.screen==="onboard"?"onboard":"step2");toast("Microfone liberado");}
+    else toast("Permissão negada — libere o microfone nas configurações do navegador");},
+  micDry:()=>{DB.settings.mic=false;DB.settings.dry=true;save();go("step2");toast("Dry-fire: toque em Parar no último tiro");}
+});
+
+/* =============================================================================
+   MODO LABORATÓRIO — grava o áudio da série + a linha do tempo do detector.
+   Idêntico em conteúdo à v7 (Camada 1): thresh/guard reais, fases standby/run,
+   tPerf contínuo, recStartPerf/beepPerf. Aditivo: não muda detecção nem pontuação.
+   ============================================================================= */
+let LAB=null;
+function startLabRec(r){try{const id=uid();r.lab={id,tl:[],chunks:[],rec:null,meta:{id,date:new Date().toISOString(),drill:T.drill.name,weapon:T.gun,cal:T.cal,dist:T.dist,rep:T.rep,expectedShots:T.drill.shots,detectedShots:0,sens:DB.settings.sens,marginDb:Math.round(marginDb(DB.settings.sens)),requireClip:!!DB.settings.requireClip,echoBlank:DB.settings.echoBlank,sampleRate:AC?AC.sampleRate:null,processing:micProc||null,userAgent:navigator.userAgent,recStartPerf:null,beepPerf:null}};
+  if(window.MediaRecorder&&micStream){try{const mr=new MediaRecorder(micStream);mr.ondataavailable=e=>{if(e.data&&e.data.size)r.lab.chunks.push(e.data);};mr.start();r.lab.meta.recStartPerf=+performance.now().toFixed(2);r.lab.rec=mr;}catch(e){r.lab.recErr=true;}}else r.lab.recErr=true;}catch(e){}}
+/* encerra a gravação (com timeout de 1,5 s, v7 R3), fecha o mic (R2) e mostra o painel */
+function finishLab(r,cont){const lab=r.lab;lab.meta.detectedShots=r.shots.length;lab.meta.shots=r.shots.map(t=>+t.toFixed(3));let done=false;
+  const fin=()=>{if(done)return;done=true;try{lab.blob=lab.chunks.length?new Blob(lab.chunks,{type:(lab.rec&&lab.rec.mimeType)||"audio/webm"}):null;}catch(e){lab.blob=null;}stopMic();relWake();LAB={lab,cont,real:"",obs:"",msg:""};S.screen="lab";render();};
+  if(lab.rec&&lab.rec.state==="recording"){lab.rec.onstop=fin;try{lab.rec.stop();}catch(e){fin();}setTimeout(fin,1500);}else fin();}
+function labModel(){const m=(/(iPhone|iPad|Android[^;)]{0,18}|Macintosh|Windows|Linux)/.exec(navigator.userAgent)||[])[0]||"web";return m.replace(/[^a-zA-Z0-9]/g,"");}
+function labPrefix(l){const d=new Date(l.meta.date),p=n=>String(n).padStart(2,"0");return "cadencia_lab_"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes())+"_"+labModel()+"_"+l.id;}
+function downloadBlob(name,blob){const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);}
+function labData(){const l=LAB.lab;return{meta:l.meta,realShots:LAB.real!==""?+LAB.real:null,obs:LAB.obs.trim(),timeline:l.tl};}
+SCREENS.lab=()=>{if(!LAB){S.screen="home";return SCREENS.home();}const l=LAB.lab,m=l.meta,p=m.processing;
+  return '<div class="scr">'+hdr('<span style="width:44px"></span>',"Laboratório",'<span style="width:44px"></span>')
+    +'<div class="ttl" style="padding-top:0">Sessão de laboratório<div class="sub">'+esc(m.drill)+(T&&T.reps>1?' · rep '+m.rep+' de '+T.reps:'')+' · áudio + linha do tempo do detector</div></div>'
+    +'<div class="kpis">'+kpi(m.detectedShots,"Detectados")+kpi(m.expectedShots>0?m.expectedShots:"livre","Esperados")+kpi(m.sampleRate?Math.round(m.sampleRate/1000)+"k":dash,"Sample rate")+'</div>'
+    +'<div class="body">'
+    +'<div class="card"><div class="lbl">Quantos tiros você realmente deu?</div><input class="inp" id="labReal" inputmode="numeric" value="'+esc(LAB.real)+'" placeholder="ex: '+m.detectedShots+'" style="width:100%;margin-top:8px;font:700 20px var(--fm)"><div class="sub" style="font-size:12px;padding-top:6px">É a verdade de referência para calibrar o microfone depois.</div></div>'
+    +'<label class="card" style="display:block"><div class="lbl">Observações</div><textarea id="labObs" rows="3" placeholder="quem estava na linha, calibres, indoor/outdoor, distância do celular…" style="width:100%;margin-top:8px;background:var(--bg);border:1px solid var(--ctl);border-radius:10px;padding:11px 12px;font:400 14.5px var(--fb);color:var(--t1);resize:vertical">'+esc(LAB.obs)+'</textarea></label>'
+    +'<div class="sub" style="font-size:12.5px">Áudio do aparelho: '+(p?"ganho auto "+(p.autoGainControl?"ligado":"desligado")+" · redução de ruído "+(p.noiseSuppression?"ligada":"desligada"):"não informado")+' · '+l.tl.length+' quadros registrados.</div>'
+    +(l.blob?'':'<div class="warn" style="text-align:left">'+(l.recErr?"Este aparelho não gravou o áudio — os dados (JSON) continuam disponíveis.":"Áudio vazio.")+'</div>')
+    +'<div style="display:flex;gap:11px">'+(l.blob?'<button class="btn" data-a="labAudio">Baixar áudio</button>':'')+'<button class="btn" data-a="labJson">Baixar dados</button></div>'
+    +(FB_ENABLED?'<button class="btn" data-a="labUp" style="flex:none;min-height:52px">Enviar ao Firebase</button>':'')
+    +(LAB.msg?'<div class="sub" style="font-size:13px;color:var(--t2)">'+esc(LAB.msg)+'</div>':'')
+    +'</div><div class="foot"><button class="btn p" data-a="labGo">Continuar</button></div></div>';};
+document.addEventListener("input",e=>{if(!LAB||!e.target)return;if(e.target.id==="labReal")LAB.real=e.target.value.replace(/[^0-9]/g,"");else if(e.target.id==="labObs")LAB.obs=e.target.value;});
+Object.assign(ACT,{
+  labJson:()=>{downloadBlob(labPrefix(LAB.lab)+".json",new Blob([JSON.stringify(labData(),null,1)],{type:"application/json"}));toast("Dados baixados");},
+  labAudio:()=>{const b=LAB.lab.blob;if(!b)return;const ext=b.type.indexOf("webm")>=0?"webm":b.type.indexOf("ogg")>=0?"ogg":b.type.indexOf("mp4")>=0?"m4a":"audio";downloadBlob(labPrefix(LAB.lab)+"."+ext,b);toast("Áudio baixado");},
+  /* upload opcional: exige Firebase Storage ativo; sem ele, o download local resolve */
+  labUp:async()=>{LAB.msg="Enviando…";render();try{if(!await ensureOnline())throw new Error("offline");await loadScript("https://www.gstatic.com/firebasejs/"+FB_VER+"/firebase-storage-compat.js");
+    const st=firebase.storage(),l=LAB.lab,base="lab/"+fb.uid+"/"+l.id,data=labData();if(l.blob)await st.ref(base+".webm").put(l.blob);await st.ref(base+".json").putString(JSON.stringify(data));
+    await fb.db.collection("labSessions").doc(l.id).set({uid:fb.uid,drill:l.meta.drill,detectedShots:l.meta.detectedShots,realShots:data.realShots,sampleRate:l.meta.sampleRate||null,storage:base,createdAt:Date.now()});LAB.msg="Enviado ✓";}
+    catch(e){LAB.msg="Não deu para enviar. O Firebase Storage precisa estar ativo no console — use o download local.";}render();},
+  labGo:()=>{const c=LAB&&LAB.cont;LAB=null;if(c)c();}
+});
+
+/* =============================================================================
+   FASE 3 — Desafios (local e online), código, ranking ao vivo, Perfil,
+   Configurações, Onboarding e tour guiado.
+   ============================================================================= */
+Object.assign(S,{chalId:null,nc:null,code:"",codeFound:null,codeMsg:"",rankRows:null,rankLive:false,rankOffline:false,rankPres:"",onbStep:0,tour:-1,pendingImport:null});
+
+/* folha de confirmação com uma terceira opção (usada no import: mesclar x substituir) */
+askSheet=function(){const a=S.ask;
+  return '<div class="ovl" role="alertdialog" aria-modal="true" aria-label="'+esc(a.title)+'"><button class="scrim" data-a="askNo" aria-label="Cancelar"></button><div class="sheet">'
+    +'<div style="font:600 20px var(--fb)">'+esc(a.title)+'</div><div style="font:400 14px var(--fb);color:var(--t2);line-height:1.45">'+esc(a.body)+'</div>'
+    +'<button class="btn '+(a.danger?"bad":"p")+'" data-a="askYes" style="flex:none;min-height:56px;border-radius:14px">'+esc(a.ok)+'</button>'
+    +(a.alt?'<button class="btn" data-a="askAlt" style="flex:none;min-height:52px;border-radius:14px">'+esc(a.alt.label)+'</button>':'')
+    +'<button class="btn" data-a="askNo" style="flex:none;min-height:52px;border-radius:14px">Cancelar</button></div></div>';};
+function ask2(title,body,ok,onYes,danger,alt){S.ask={title,body,ok,onYes,danger,alt};render();}
+ACT.askAlt=()=>{const a=S.ask;S.ask=null;if(a&&a.alt&&a.alt.fn)a.alt.fn();else render();};
+
+/* =============================================================================
+   DESAFIOS
+   ============================================================================= */
+const metricLabel=m=>m==="hf"?"por hit factor":m==="total"?"por tempo":"por 1º tiro";
+function curChal(){return DB.challenges.find(c=>c.id===S.chalId);}
+function daysLeft(ch){if(!ch.endsAt)return null;return Math.ceil((ch.endsAt-Date.now())/864e5);}
+/* ranking de desafio LOCAL: melhor resultado por atirador, pela métrica do desafio */
+function localRows(ch){const m=ch.metric||"hf",val=s=>m==="hf"?(s.hf||0):m==="total"?(s.total||9999):(s.first==null?9999:s.first),high=m==="hf";
+  const best={};DB.sessions.filter(s=>s.challengeId===ch.id).forEach(s=>{const k=s.profileId;if(!(k in best)||(high?val(s)>val(best[k]):val(s)<val(best[k])))best[k]=s;});
+  return Object.values(best).map(s=>({uid:s.profileId,name:s.profileName,total:s.total,first:s.first,hf:s.hf,acc:s.acc,me:s.profileId===DB.currentProfile}))
+    .sort((a,b)=>high?(b.hf||0)-(a.hf||0):(val(a)-val(b)));}
+function rowsFor(ch){if(!ch)return [];if(!ch.online)return localRows(ch);
+  const rows=(S.rankRows&&S.rankRows.id===ch.id?S.rankRows.rows:null)||ch.lastRows||[];const m=ch.metric||"hf",high=m==="hf";
+  const val=s=>m==="hf"?(+s.hf||0):m==="total"?(+s.total||9999):(s.first==null?9999:+s.first);
+  return rows.slice().sort((a,b)=>high?val(b)-val(a):val(a)-val(b)).map(r=>Object.assign({},r,{me:r.uid&&fb.uid&&r.uid===fb.uid}));}
+function myPos(ch){const r=rowsFor(ch),i=r.findIndex(x=>x.me);return i<0?null:i+1;}
+
+SCREENS.challenges=()=>{
+  const list=DB.challenges.slice().reverse();
+  const card=ch=>{const d=drillById(ch.drillId),n=ch.online?(rowsFor(ch).length||(ch.lastRows||[]).length):new Set(DB.sessions.filter(s=>s.challengeId===ch.id).map(s=>s.profileId)).size;
+    const dl=daysLeft(ch),pos=myPos(ch);
+    return '<button class="card click" data-a="openChal" data-v="'+esc(ch.id)+'" style="padding:14px"><div class="split" style="align-items:flex-start"><div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="nm">'+esc(ch.name)+'</span>'
+      +(ch.online?'<span style="background:var(--acc);color:#101317;border-radius:6px;padding:1px 7px;font:700 10px var(--fc);letter-spacing:.12em">ONLINE</span>':'<span style="border:1px solid var(--ctl);color:var(--t3);border-radius:6px;padding:1px 7px;font:700 10px var(--fc);letter-spacing:.12em">LOCAL</span>')+'</div>'
+      +'<div class="sub" style="font-size:13px;padding-top:3px">'+esc(d?d.name:(ch.drillName||"drill removido"))+' · '+fnum(ch.dist)+' m · '+metricLabel(ch.metric)+'</div></div></div>'
+      +'<div class="split" style="padding-top:9px"><div class="sub" style="font-size:12.5px">'+plural(n,"atirador","atiradores")+(dl!=null?(dl>0?" · encerra em "+plural(dl,"dia","dias"):" · encerrado"):"")+'</div>'+(pos?'<span class="mono" style="font-weight:700;color:var(--acc)">'+pos+'º</span>':'')+'</div></button>';};
+  return '<div class="scr">'+hdr(B.menu,"Desafios",'<button class="hb" data-a="newChal" aria-label="Criar desafio">+</button>')
+    +'<div class="body" style="gap:10px">'
+    +(DB.outbox.length?'<div class="card" style="border-color:var(--acc)"><div style="font:600 15px var(--fb)">'+plural(DB.outbox.length,"resultado aguardando envio","resultados aguardando envio")+'</div><div class="sub">Sobem sozinhos quando a conexão voltar.</div></div>':'')
+    +(list.length?list.map(card).join(""):'<div class="empty"><div style="font:600 18px var(--fb);color:var(--t1);padding-bottom:6px">Nenhum desafio ainda</div>Crie um e chame a galera, ou entre com o código de alguém.</div>')
+    +'<button class="dash" data-a="go" data-v="code">Entrar com código</button></div>'
+    +'<div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
+
+SCREENS.newChall=()=>{const n=S.nc;if(!n){S.screen="challenges";return SCREENS.challenges();}
+  const typeCard=(k,t,sub)=>'<button class="card click" data-a="ncKind" data-v="'+k+'" style="flex:1;padding:13px'+(n.kind===k?";border-color:var(--acc);background:var(--acc-bg)":"")+'"><div style="font:600 16px var(--fb)">'+t+'</div><div class="sub" style="font-size:12.5px">'+sub+'</div></button>';
+  return '<div class="scr">'+hdr(B.back("challenges","Voltar aos desafios"),"Criar desafio",B.home)
+    +'<div class="body">'
+    +'<div style="display:flex;gap:11px">'+typeCard("online","Online","celulares diferentes, ranking ao vivo")+typeCard("local","Local","todos no mesmo aparelho")+'</div>'
+    +'<label class="card" style="display:block"><div class="lbl">Nome do desafio</div><input class="inp" id="ncName" value="'+esc(n.name)+'" placeholder="ex: Terça do Bill" style="width:100%;margin-top:8px;font:500 16px var(--fb)"></label>'
+    +'<div class="card"><div class="lbl">Drill</div><div style="display:flex;flex-direction:column;gap:7px;padding-top:9px;max-height:210px;overflow:auto">'
+      +DB.drills.map(d=>'<button class="card click" data-a="ncDrill" data-v="'+esc(d.id)+'" style="padding:11px 12px'+(n.drillId===d.id?";border-color:var(--acc)":"")+'"><div style="font:600 15px var(--fb)">'+esc(d.name)+'</div><div class="sub" style="font-size:12.5px">'+drillMeta(d)+'</div></button>').join("")+'</div></div>'
+    +'<div class="card"><div class="lbl">Ranquear por</div><div class="g3">'+[["hf","Hit factor"],["total","Tempo"],["first","1º tiro"]].map(([k,l])=>'<button class="opt'+(n.metric===k?" on":"")+'" data-a="ncMetric" data-v="'+k+'">'+l+'</button>').join("")+'</div></div>'
+    +'<div style="display:flex;gap:11px"><div class="card" style="flex:1"><div class="lbl">Distância (m)</div>'+stepper("ncDist",fnum(n.dist),"distância")+'</div><div class="card" style="flex:1"><div class="lbl">Encerra em (dias)</div>'+stepper("ncDays",n.days,"dias")+'</div></div>'
+    +(n.kind==="online"?'<div class="note" style="margin:0">Só o resultado do desafio sobe. Seu treino pessoal fica no aparelho.</div>':'<div class="note" style="margin:0">No desafio local, cada atirador entra no seu perfil deste aparelho e revezam o celular.</div>')
+    +'</div><div class="foot"><button class="btn p" data-a="ncSave">'+(n.kind==="online"?"Criar e gerar código":"Criar desafio")+'</button></div></div>';};
+
+/* ---------- entrar com código (6 caracteres, como os códigos que o app gera) ---------- */
+SCREENS.code=()=>{const c=S.code.padEnd(6," ");
+  return '<div class="scr">'+hdr(B.back("challenges","Voltar aos desafios"),"Entrar com código",B.home)
+    +'<div class="ttl">Digite o código<div class="sub">6 caracteres, como o dono do desafio enviou.</div></div>'
+    +'<div class="body">'
+    +'<div style="position:relative"><div style="display:flex;gap:7px">'+[0,1,2,3,4,5].map(i=>'<div style="flex:1;aspect-ratio:1;border-radius:12px;border:1.5px solid '+(i===S.code.length?"var(--acc)":"var(--ctl)")+';display:flex;align-items:center;justify-content:center;font:700 26px var(--fm);color:'+(c[i].trim()?"var(--t1)":"var(--pend)")+'">'+(c[i].trim()||"–")+'</div>').join("")+'</div>'
+      +'<input id="codeIn" value="'+esc(S.code)+'" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Código do desafio" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:16px;border:0;background:transparent"></div>'
+    +(S.codeMsg?'<div class="sub" style="font-size:13.5px;color:var(--t2)">'+esc(S.codeMsg)+'</div>':'')
+    +(S.codeFound?'<div class="card" style="border-color:var(--ok)"><div class="lbl" style="color:var(--ok)">Encontrado</div><div style="font:600 18px var(--fb);padding-top:5px">'+esc(S.codeFound.name)+'</div><div class="sub">'+esc(S.codeFound.drillName||"")+' · '+fnum(S.codeFound.dist)+' m · '+metricLabel(S.codeFound.metric)+'</div></div>':'')
+    +'</div><div class="foot"><button class="btn'+(S.codeFound?" p":"")+'" data-a="codeJoin">Entrar no desafio</button></div></div>';};
+
+/* ---------- ranking ---------- */
+SCREENS.ranking=()=>{const ch=curChal();if(!ch){S.screen="challenges";return SCREENS.challenges();}
+  const d=drillById(ch.drillId);
+  return '<div class="scr">'+hdr(B.back("challenges","Voltar aos desafios"),"Ranking",B.home)
+    +'<div style="padding:0 18px 12px" class="split"><div style="min-width:0"><div style="font:600 22px var(--fb)">'+esc(ch.name)+'</div><div class="sub">'+esc(d?d.name:(ch.drillName||"?"))+' · '+fnum(ch.dist)+' m · '+metricLabel(ch.metric)+'</div></div>'
+      +(ch.online?'<button class="link" data-a="copyCode" style="text-align:right;flex:none;padding:0"><span class="mono" style="font-weight:700;font-size:17px;color:var(--acc);letter-spacing:.08em">'+esc(ch.code)+'</span><br><span style="font-size:12px">copiar</span></button>':'')+'</div>'
+    +'<div class="body" style="padding:0;gap:0" id="rankBox">'+rankInner(ch)+'</div>'
+    +'<div class="foot"><button class="btn" data-a="chalRemove" style="flex:none;width:60px" aria-label="Remover desafio da lista">✕</button><button class="btn p" data-a="chalRun">Nova tentativa</button></div></div>';};
+function rankInner(ch){const rows=rowsFor(ch),live=ch.online?(S.rankLive?'<span style="color:var(--ok)">ao vivo</span>':'<span style="color:var(--bad)">offline</span>'):'<span style="color:var(--t3)">neste aparelho</span>';
+  const top=rows.slice(0,3),order=[1,0,2],hs=[62,92,44];
+  const podium=rows.length?'<div style="display:flex;align-items:flex-end;gap:9px;padding:0 18px 14px">'+order.map((idx,i)=>{const r=top[idx];if(!r)return '<div style="flex:1"></div>';
+      return '<div style="flex:1;text-align:center"><div class="sub" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name||"Anônimo")+'</div>'
+        +'<div style="height:'+hs[i]+'px;border-radius:12px 12px 0 0;margin-top:6px;display:flex;align-items:flex-start;justify-content:center;padding-top:8px;font:700 18px var(--fm);background:'+(r.me?"var(--acc)":"var(--surf)")+';border:1px solid '+(r.me?"var(--acc)":"var(--bd)")+';color:'+(r.me?"#101317":"var(--t2)")+'">'+(idx+1)+'º</div></div>';}).join("")+'</div>':'';
+  const banner=(ch.online&&S.rankOffline)?'<div style="margin:0 18px 12px;background:var(--bad-bg);border:1px solid var(--bad-bd);border-radius:12px;padding:11px 13px" class="split"><div><div style="font:600 14px var(--fb);color:var(--bad)">Sem conexão</div><div class="sub" style="font-size:12.5px">'+(ch.lastAt?"mostrando o ranking salvo às "+new Date(ch.lastAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}):"nenhum ranking salvo ainda")+'</div></div><button class="link" data-a="rankRetry" style="padding:0">tentar</button></div>':'';
+  const pres=S.rankPres?'<div class="sub" style="padding:0 18px 10px;color:var(--bad)">● '+esc(S.rankPres)+'</div>':'';
+  return banner+podium+pres+'<div class="split" style="padding:0 18px 9px"><div class="lbl">Classificação</div><div style="font:700 11px var(--fc);letter-spacing:.14em;text-transform:uppercase">'+live+'</div></div>'
+    +(rows.length?'<div style="padding:0 18px 12px;display:flex;flex-direction:column;gap:8px">'+rows.map((r,i)=>'<div class="card split" style="padding:11px 13px'+(r.me?";border-color:var(--acc);background:var(--acc-bg)":"")+'"><div style="display:flex;gap:11px;align-items:center;min-width:0"><span class="mono" style="font-weight:700;width:26px;color:'+(i<3?"var(--acc)":"var(--t3)")+'">'+(i+1)+'º</span><div style="min-width:0"><div style="font:600 15px var(--fb)">'+esc(r.name||"Anônimo")+'</div><div class="sub" style="font-size:12.5px">'+fmt(+r.total||0,2)+' s'+(r.acc!=null?' · '+(+r.acc||0)+'%':'')+'</div></div></div><span class="mono" style="font-weight:700;font-size:17px;color:var(--acc)">'+fmt(+r.hf||0,2)+'</span></div>').join("")+'</div>'
+      :'<div class="empty" style="margin:0 18px">Sem resultados ainda. Seja o primeiro.</div>');}
+function paintRanking(){const ch=curChal(),box=$("#rankBox");if(ch&&box)box.innerHTML=rankInner(ch);}
+/* liga os listeners em tempo real (resultados + presença) e guarda o último ranking para o modo offline */
+function attachRanking(){const ch=curChal();if(!ch)return;S.rankRows=null;S.rankPres="";
+  if(!ch.online){S.rankLive=false;S.rankOffline=false;paintRanking();return;}
+  detachChal();S.rankOffline=!navigator.onLine;S.rankLive=false;paintRanking();
+  ensureOnline().then(ok=>{if(!ok||S.screen!=="ranking"){S.rankOffline=true;paintRanking();return;}
+    const base=fb.db.collection("challenges").doc(ch.code);
+    chalUnsub.push(base.collection("results").onSnapshot(sn=>{const rows=[];sn.forEach(d=>rows.push(d.data()));
+      S.rankRows={id:ch.id,rows};ch.lastRows=rows;ch.lastAt=Date.now();save();
+      S.rankLive=!sn.metadata.fromCache&&navigator.onLine;S.rankOffline=!S.rankLive;paintRanking();},()=>{S.rankOffline=true;paintRanking();}));
+    chalUnsub.push(base.collection("presence").onSnapshot(sn=>{const live=[];sn.forEach(d=>{const p=d.data();if(p.status==="atirando"&&d.id!==fb.uid)live.push(p.name||"Alguém");});
+      S.rankPres=live.length?live.join(", ")+(live.length>1?" estão atirando…":" está atirando…"):"";paintRanking();},()=>{}));});}
+/* exige um nome antes de competir online (o ranking é público para quem tem o código) */
+function needName(){if(userName())return true;toast("Coloque seu nome no perfil antes de competir online");go("profile");return false;}
+
+document.addEventListener("input",e=>{const el=e.target;if(!el)return;
+  if(el.id==="ncName"&&S.nc)S.nc.name=el.value;
+  else if(el.id==="codeIn"){const v=el.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6);S.code=v;S.codeFound=null;S.codeMsg="";render();const i=$("#codeIn");if(i){i.focus();}if(v.length===6)lookupCode(v);}
+  else if(el.id==="pfName"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.name=el.value;save();}}
+  else if(el.id==="pfClub"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.clube=el.value;save();}}
+  else if(el.id==="pfGunModel"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.model=el.value;save();}}
+  else if(el.id==="onbName"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.name=el.value;save();}}
+  else if(el.id==="onbClub"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.clube=el.value;save();}}});
+async function lookupCode(code){S.codeMsg="Procurando…";render();
+  if(!await ensureOnline()){S.codeMsg="Sem conexão — conecte para entrar num desafio online.";render();return;}
+  try{const sn=await fb.db.collection("challenges").doc(code).get();
+    if(!sn.exists){S.codeFound=null;S.codeMsg="Desafio não encontrado: "+code;}
+    else{S.codeFound=Object.assign({code},sn.data());S.codeMsg="";}}
+  catch(e){S.codeMsg="Não foi possível buscar o desafio agora.";}
+  render();}
+
+Object.assign(ACT,{
+  newChal:()=>{S.nc={kind:"online",name:"",drillId:S.selId||(DB.drills[0]||{}).id,metric:"hf",dist:7,days:7};go("newChall");},
+  ncKind:v=>{S.nc.kind=v;render();},
+  ncDrill:v=>{S.nc.drillId=v;const d=drillById(v);if(d)S.nc.dist=d.dist||S.nc.dist;render();},
+  ncMetric:v=>{S.nc.metric=v;render();},
+  ncDist:v=>{S.nc.dist=Math.max(1,Math.min(50,Math.round(S.nc.dist)+(+v)));render();},
+  ncDays:v=>{S.nc.days=Math.max(1,Math.min(90,S.nc.days+(+v)));render();},
+  ncSave:async()=>{const n=S.nc,name=(n.name||"").trim();if(!name){toast("Dê um nome ao desafio");return;}
+    const d=drillById(n.drillId);if(!d){toast("Escolha um drill");return;}
+    const endsAt=Date.now()+n.days*864e5;
+    if(n.kind==="local"){const ch={id:uid(),name,drillId:d.id,drillName:d.name,dist:n.dist,metric:n.metric,createdAt:Date.now(),endsAt};DB.challenges.push(ch);save();S.nc=null;S.chalId=ch.id;go("ranking");toast("Desafio criado");return;}
+    if(!needName())return;toast("Criando…");
+    try{if(!await ensureOnline())throw new Error("offline");
+      const code=newCode(),snap={name:d.name,shots:d.shots,par:d.par,pen:d.pen||0,dist:d.dist,target:d.target||""};
+      await fb.db.collection("challenges").doc(code).set({name,drillId:d.id,drillName:d.name,dist:n.dist,metric:n.metric,drillSnap:snap,endsAt,createdAt:Date.now(),ownerUid:fb.uid,ownerName:onlineName()});
+      const ch={id:code,code,online:true,name,drillId:d.id,drillName:d.name,dist:n.dist,metric:n.metric,drillSnap:snap,endsAt,ownerUid:fb.uid};
+      DB.challenges.push(ch);save();S.nc=null;S.chalId=ch.id;go("ranking");toast("Desafio criado · código "+code);}
+    catch(e){toast("Sem conexão — não deu para criar o desafio online");}},
+  openChal:v=>{S.chalId=v;go("ranking");},
+  copyCode:()=>{const ch=curChal();if(!ch||!ch.code)return;const t=ch.code;
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>toast("Código "+t+" copiado")).catch(()=>toast("Código: "+t));else toast("Código: "+t);},
+  rankRetry:()=>{attachRanking();toast("Tentando de novo…");},
+  chalRun:()=>{const ch=curChal();if(!ch)return;if(ch.online&&!needName())return;
+    const dl=daysLeft(ch);if(dl!=null&&dl<=0){toast("Esse desafio já encerrou");return;}startTraining(ch);},
+  chalRemove:()=>{const ch=curChal();if(!ch)return;ask("Remover da lista?",ch.online?"O desafio continua no ar para os outros; ele some só deste aparelho. Dá para voltar com o código "+ch.code+".":"O desafio sai deste aparelho. As sessões já salvas continuam no histórico.","Remover",()=>{DB.challenges=DB.challenges.filter(c=>c.id!==ch.id);save();go("challenges");toast("Desafio removido");},true);},
+  codeJoin:async()=>{if(!S.codeFound){toast(S.code.length<6?"Faltam caracteres no código":"Nenhum desafio encontrado");return;}
+    if(!needName())return;const c=S.codeFound,code=c.code;
+    let ch=DB.challenges.find(x=>x.id===code);
+    if(!ch){ch={id:code,code,online:true,name:c.name,drillId:c.drillId,drillName:c.drillName,dist:c.dist,metric:c.metric,drillSnap:c.drillSnap||null,endsAt:c.endsAt||null,ownerUid:c.ownerUid};DB.challenges.push(ch);save();}
+    S.code="";S.codeFound=null;S.chalId=ch.id;go("ranking");toast("Você entrou em "+ch.name);}
+});
+
+/* =============================================================================
+   PERFIL — dados do atirador, material padrão, recordes e troca de atirador
+   ============================================================================= */
+SCREENS.profile=()=>{ensureGear();const p=DB.profiles.find(x=>x.id===DB.currentProfile)||{},s=DB.settings;
+  const mine=DB.sessions.filter(x=>x.profileId===DB.currentProfile),sc=mine.filter(isScored);
+  const bHf=sc.length?Math.max(...sc.map(x=>x.hf)):null,bF=(()=>{const f=mine.map(x=>x.first).filter(x=>x>0);return f.length?Math.min(...f):null;})();
+  const first=mine.length?new Date(Math.min(...mine.map(x=>new Date(x.date).getTime()))):null;
+  const field=(id,label,val,ph)=>'<label class="card" style="display:block"><div class="lbl">'+label+'</div><input class="inp" id="'+id+'" value="'+esc(val||"")+'" placeholder="'+ph+'" style="width:100%;margin-top:8px;border:1px solid var(--ctl);font:400 15px var(--fb)"></label>';
+  return '<div class="scr">'+hdr(B.menu,"Perfil",B.home)
+    +'<div style="padding:0 18px 14px;display:flex;gap:14px;align-items:center"><div style="width:62px;height:62px;border-radius:18px;border:1.5px solid var(--acc);color:var(--acc);display:flex;align-items:center;justify-content:center;font:700 20px var(--fc);letter-spacing:.06em">'+initials()+'</div>'
+      +'<div style="min-width:0"><div style="font:600 21px var(--fb)">'+esc(userName()||"Sem nome")+'</div><div class="sub">'+plural(mine.length,"sessão salva","sessões salvas")+(first?" · desde "+dshort(first):"")+'</div></div></div>'
+    +'<div class="body">'
+    +field("pfName","Nome",p.name==="Eu"?"":p.name,"como aparece no ranking")
+    +field("pfClub","Clube / stand",p.clube,"onde você treina")
+    +field("pfGunModel","Arma principal (modelo)",p.model,"ex: Glock 19 Gen5")
+    +'<div class="card"><div class="split"><div class="lbl">Tipo de arma padrão</div><div class="sub" style="font-size:12px">já vem escolhido no treino</div></div><div class="g3">'+GUNS.map(g=>'<button class="opt'+(s.gun===g?" on":"")+'" data-a="gun" data-v="'+g+'">'+g+'</button>').join("")+'</div></div>'
+    +'<div class="card"><div class="lbl">Calibre padrão</div><div class="g3">'+calsFor(s.gun).map(c=>'<button class="opt m'+(s.cal===c?" on":"")+'" data-a="cal" data-v="'+esc(c)+'">'+esc(c)+'</button>').join("")+'</div></div>'
+    +'<div class="card"><div class="lbl">Mão dominante</div><div class="g3">'+["Direita","Esquerda","Ambas"].map(h=>'<button class="opt'+((p.hand||"Direita")===h?" on":"")+'" data-a="pfHand" data-v="'+h+'">'+h+'</button>').join("")+'</div></div>'
+    +'<div class="card"><div class="lbl">Recordes</div><div style="display:flex;gap:9px;padding-top:10px">'+kpi(bHf!=null?fmt(bHf,2):dash,"Melhor HF",true)+kpi(bF!=null?fmt(bF,2):dash,"Melhor 1º tiro")+kpi(mine.length,"Sessões")+'</div></div>'
+    +'<div class="card"><div class="lbl">Atiradores neste aparelho</div><div style="display:flex;flex-direction:column;gap:7px;padding-top:9px">'
+      +DB.profiles.map(x=>'<button class="card click split" data-a="pfSwitch" data-v="'+esc(x.id)+'" style="padding:11px 12px'+(x.id===DB.currentProfile?";border-color:var(--acc)":"")+'"><span style="font:600 15px var(--fb)">'+esc(x.name)+'</span>'+(x.id===DB.currentProfile?'<span style="color:var(--acc);font-weight:700">✓</span>':'<span class="sub" style="font-size:12.5px">trocar</span>')+'</button>').join("")
+      +'<button class="dash" data-a="pfNew">+ Novo atirador</button></div><div class="sub" style="font-size:12px;padding-top:8px">Serve para desafios locais: cada um entra no seu perfil e revezam o celular.</div></div>'
+    +'<button class="link" data-a="go" data-v="settings">Configurações do app</button>'
+    +'</div><div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
+Object.assign(ACT,{
+  pfHand:v=>{const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.hand=v;save();render();}},
+  pfSwitch:v=>{DB.currentProfile=v;save();render();toast("Atirador: "+profName(v));},
+  pfNew:()=>{const p={id:uid(),name:"Atirador "+(DB.profiles.length+1)};DB.profiles.push(p);DB.currentProfile=p.id;save();render();toast("Novo atirador criado — ajuste o nome acima");}
+});
+
+/* =============================================================================
+   CONFIGURAÇÕES — largada, microfone/laboratório e dados
+   ============================================================================= */
+SCREENS.settings=()=>{const s=DB.settings,late=backupLate(),dexp=daysSinceExport();
+  const rowTg=(act,label,sub,on)=>'<button class="split" data-a="'+act+'" role="switch" aria-checked="'+!!on+'" style="width:100%;background:none;border:0;border-top:1px solid var(--track);padding:13px 0;text-align:left;cursor:pointer"><div><div style="font:500 15px var(--fb);color:var(--t1)">'+label+'</div>'+(sub?'<div class="sub" style="font-size:12.5px">'+sub+'</div>':'')+'</div><span class="tg'+(on?" on":"")+'"><i></i></span></button>';
+  return '<div class="scr">'+hdr(B.menu,"Config",B.home)
+    +'<div class="body">'
+    +'<div class="card"><div class="lbl">Largada</div>'
+      +'<div style="display:flex;gap:11px;padding-top:10px"><div style="flex:1"><div class="sub" style="font-size:12.5px">Atraso mínimo</div>'+stepper("dmin",fmt(s.dlyMin,1)+"s","atraso mínimo")+'</div><div style="flex:1"><div class="sub" style="font-size:12.5px">Atraso máximo</div>'+stepper("dmax",fmt(s.dlyMax,1)+"s","atraso máximo")+'</div></div>'
+      +'<div style="padding-top:12px"><div class="sub" style="font-size:12.5px;padding-bottom:7px">Volume do beep</div><div class="g3" style="padding-top:0">'+[["baixo","Baixo"],["medio","Médio"],["alto","Alto"]].map(([k,l])=>'<button class="opt'+(s.beepVol===k?" on":"")+'" data-a="vol" data-v="'+k+'">'+l+'</button>').join("")+'</div></div>'
+      +rowTg("tgVib","Vibração","",s.vibrate)+rowTg("tgFlash","Piscar a tela","sinal visual para quem usa protetor",s.flash)+rowTg("tgFlash2","Piscar duas vezes","",s.flashDouble)
+      +rowTg("tgPar","Beep no fim do tempo-alvo","avisa quando o par time acaba",s.parBeep)+rowTg("tgWake","Manter a tela ligada","",s.wake)+'</div>'
+    +'<div class="card"><div class="lbl">Microfone</div>'
+      +'<button class="split" data-a="go" data-v="mic" style="width:100%;background:none;border:0;padding:12px 0 0;text-align:left;cursor:pointer"><div><div style="font:500 15px var(--fb);color:var(--t1)">Ajuste de captação</div><div class="sub" style="font-size:12.5px">margem '+Math.round(marginDb(s.sens))+' dB · anti-eco '+(s.echoBlank||150)+' ms'+(s.requireClip?" · exige impacto forte":"")+'</div></div><span style="color:var(--t3)">›</span></button>'
+      +rowTg("tgLab","Modo laboratório","grava áudio + linha do tempo do detector (arquivos grandes)",s.lab)+'</div>'
+    +'<div class="card"><div class="lbl">Dados</div>'
+      +'<button class="split" data-a="backup" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 15px var(--fb);color:var(--t1)">Exportar backup (JSON)</div><div class="sub" style="font-size:12.5px;color:'+(late?"var(--bad)":"var(--t3)")+'">'+(dexp===null?"nenhum backup feito ainda":dexp===0?"backup feito hoje":plural(dexp,"dia","dias")+" desde o último")+'</div></div><span style="color:var(--t3)">›</span></button>'
+      +'<button class="split" data-a="csv" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 15px var(--fb);color:var(--t1)">Exportar planilha (CSV)</div><div class="sub" style="font-size:12.5px">'+plural(DB.sessions.length,"sessão","sessões")+'</div></div><span style="color:var(--t3)">›</span></button>'
+      +'<button class="split" data-a="importPick" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 15px var(--fb);color:var(--t1)">Importar backup</div><div class="sub" style="font-size:12.5px">mesclar com os atuais ou substituir tudo</div></div><span style="color:var(--t3)">›</span></button>'
+      +'<button class="split" data-a="wipe" style="width:100%;background:none;border:0;padding:12px 0 0;text-align:left;cursor:pointer"><div style="font:500 15px var(--fb);color:var(--bad)">Apagar todos os dados</div><span style="color:var(--bad)">›</span></button>'
+      +'<input type="file" id="fileImport" accept="application/json" style="display:none"></div>'
+    +'<button class="link" data-a="reonboard">Rever primeiros passos</button>'
+    +'<div class="sub" style="font-size:12.5px;text-align:center;padding-top:4px">Cadência v8 · tudo salvo neste aparelho<br><a href="cadencia.html">abrir a versão anterior (v7)</a></div>'
+    +'</div><div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
+/* CSV com proteção contra fórmula (v7 S7) */
+function exportCSV(){const head=["data","atirador","drill","arma","calibre","distancia_m","tempo_total_s","tempo_1o_tiro_s","tiros","esperados","acertos","erros","pontos","precisao_pct","hit_factor","tempo_corrigido_s","splits_s","zonas","desafio","bloco_id","rep","bloco_tam"];
+  const rows=DB.sessions.map(s=>[new Date(s.date).toLocaleString("pt-BR"),s.profileName,s.drillName,s.weapon,s.cal,s.dist,fmt(s.total,2),s.first!=null?fmt(s.first,2):"",s.nShots,s.expShots,s.hits,s.miss,s.points,s.acc,fmt(s.hf||0,2),s.corr?fmt(s.corr,2):"",(s.splits||[]).map(x=>fmt(x,2)).join(" "),(s.shotZones||[]).join(""),s.challengeId?((DB.challenges.find(c=>c.id===s.challengeId)||{}).name||""):"",s.blockId||"",s.repIndex||"",s.blockSize||""]
+    .map(c=>{let v=String(c==null?"":c);if(/^[=+\-@]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"';}).join(";"));
+  downloadBlob("cadencia_treinos.csv",new Blob(["\uFEFF"+head.join(";")+"\n"+rows.join("\n")],{type:"text/csv"}));toast("CSV exportado");}
+/* coerção numérica das sessões importadas (v7 S8) */
+function sanitizeSession(s){if(!s||typeof s!=="object")return{};const n=v=>{const x=+v;return isFinite(x)?x:0;};
+  ["total","hf","acc","nShots","hits","miss","points","corr","dist","expShots","repIndex","blockSize"].forEach(k=>{if(s[k]!=null)s[k]=n(s[k]);});
+  if(s.first!=null)s.first=n(s.first);s.splits=Array.isArray(s.splits)?s.splits.map(n):[];
+  if(s.shotZones&&!Array.isArray(s.shotZones))s.shotZones=null;return s;}
+function doImport(json,merge){const mg=(cur,inc,fn)=>{const map={};(cur||[]).forEach(x=>{if(x&&x.id!=null)map[x.id]=x;});(inc||[]).forEach(x=>{if(x&&x.id!=null)map[x.id]=fn?fn(x):x;});return Object.values(map);};
+  try{const j=json;
+    if(merge){if(Array.isArray(j.sessions))DB.sessions=mg(DB.sessions,j.sessions,sanitizeSession);if(Array.isArray(j.drills))DB.drills=mg(DB.drills,j.drills);if(Array.isArray(j.challenges))DB.challenges=mg(DB.challenges,j.challenges);if(Array.isArray(j.profiles))DB.profiles=mg(DB.profiles,j.profiles);}
+    else{if(Array.isArray(j.sessions))DB.sessions=j.sessions.map(sanitizeSession);if(Array.isArray(j.drills)&&j.drills.length)DB.drills=j.drills;if(Array.isArray(j.challenges))DB.challenges=j.challenges;if(Array.isArray(j.profiles)&&j.profiles.length)DB.profiles=j.profiles;if(j.currentProfile)DB.currentProfile=j.currentProfile;if(j.settings)DB.settings=Object.assign({},DEFAULT_SETTINGS,j.settings);}
+    migrateDrills(DB);ensureGear();save();S.pendingImport=null;render();toast(merge?"Dados mesclados":"Dados importados");}
+  catch(e){toast("Arquivo inválido");}}
+document.addEventListener("change",e=>{if(e.target&&e.target.id==="fileImport"){const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{let j;try{j=JSON.parse(r.result);}catch(err){toast("Arquivo inválido");return;}
+    ask2("Importar backup","Mesclar une por id, sem duplicar o que já existe. Substituir troca tudo pelo arquivo.","Mesclar",()=>doImport(j,true),false,{label:"Substituir tudo",fn:()=>doImport(j,false)});};
+  r.readAsText(f);e.target.value="";}});
+Object.assign(ACT,{
+  dmin:v=>{const s=DB.settings;s.dlyMin=Math.max(0.5,Math.min(10,Math.round((s.dlyMin+0.5*(+v))*10)/10));if(s.dlyMax<s.dlyMin)s.dlyMax=s.dlyMin;save();render();},
+  dmax:v=>{const s=DB.settings;s.dlyMax=Math.max(s.dlyMin,Math.min(15,Math.round((s.dlyMax+0.5*(+v))*10)/10));save();render();},
+  vol:v=>{DB.settings.beepVol=v;save();render();beep();},
+  tgVib:()=>{DB.settings.vibrate=!DB.settings.vibrate;save();render();if(DB.settings.vibrate&&navigator.vibrate)navigator.vibrate(60);},
+  tgFlash:()=>{DB.settings.flash=!DB.settings.flash;save();render();},
+  tgFlash2:()=>{DB.settings.flashDouble=!DB.settings.flashDouble;save();render();},
+  tgPar:()=>{DB.settings.parBeep=!DB.settings.parBeep;save();render();},
+  tgWake:()=>{DB.settings.wake=!DB.settings.wake;save();render();},
+  tgLab:()=>{DB.settings.lab=!DB.settings.lab;save();render();toast(DB.settings.lab?"Laboratório ligado — cada série gera áudio + dados":"Laboratório desligado");},
+  csv:()=>exportCSV(),
+  importPick:()=>{const el=$("#fileImport");if(el)el.click();},
+  wipe:()=>ask("Apagar todos os dados?","Isso remove "+plural(DB.sessions.length,"sessão","sessões")+" e seus drills deste aparelho. Não tem como desfazer.","Apagar tudo",()=>{
+    try{localStorage.removeItem(KEY);}catch(e){}DB=load();migrateDrills(DB);save();T=null;S.detId=null;S.chalId=null;ensureGear();pickDrill((DB.drills[0]||{}).id);go("home");toast("Tudo apagado");},true),
+  reonboard:()=>{S.onbStep=0;go("onboard");}
+});
+
+/* =============================================================================
+   ONBOARDING (3 passos) + TOUR GUIADO sobre o Início
+   ============================================================================= */
+SCREENS.onboard=()=>{const st=S.onbStep,p=DB.profiles.find(x=>x.id===DB.currentProfile)||{},s=DB.settings;
+  const bar='<div class="prog" style="padding:16px 18px 10px">'+[0,1,2].map(i=>'<i style="background:'+(i===st?"var(--acc)":i<st?"#6b4a22":"var(--bd)")+'"></i>').join("")+'</div>';
+  let body,title,kicker,cta;
+  if(st===0){kicker="Passo 1 de 3";title="Bem-vindo ao Cadência";
+    body='<div class="sub" style="font-size:14.5px;color:var(--t2)">Um cronômetro de tiro que ouve os seus disparos e guarda a evolução. Tudo fica neste aparelho.</div>'
+      +'<label class="card" style="display:block"><div class="lbl">Seu nome</div><input class="inp" id="onbName" value="'+esc(p.name==="Eu"?"":p.name)+'" placeholder="como aparece no ranking" style="width:100%;margin-top:8px;font:500 16px var(--fb)"></label>'
+      +'<label class="card" style="display:block"><div class="lbl">Clube / stand</div><input class="inp" id="onbClub" value="'+esc(p.clube||"")+'" placeholder="onde você treina" style="width:100%;margin-top:8px;border:1px solid var(--ctl);font:400 15px var(--fb)"></label>';
+    cta="Continuar";}
+  else if(st===1){kicker="Passo 2 de 3";title="Seu material";
+    body='<div class="sub" style="font-size:14.5px;color:var(--t2)">Vai vir escolhido em todo treino — dá para trocar na hora.</div>'
+      +'<div class="card"><div class="lbl">Tipo de arma</div><div class="g3">'+GUNS.map(g=>'<button class="opt'+(s.gun===g?" on":"")+'" data-a="gun" data-v="'+g+'">'+g+'</button>').join("")+'</div></div>'
+      +'<div class="card"><div class="lbl">Calibre</div><div class="g3">'+calsFor(s.gun).map(c=>'<button class="opt m'+(s.cal===c?" on":"")+'" data-a="cal" data-v="'+esc(c)+'">'+esc(c)+'</button>').join("")+'</div></div>';
+    cta="Continuar";}
+  else{kicker="Passo 3 de 3";title="O microfone é o cronômetro";
+    body='<div class="card" style="display:flex;flex-direction:column;gap:9px">'+["O beep larga e o mic marca cada tiro","Splits e hit factor saem sozinhos","Nada é gravado nem enviado"].map(t=>'<div style="display:flex;gap:10px;font:400 14.5px var(--fb);color:var(--t2)"><span style="color:var(--ok)">✓</span>'+t+'</div>').join("")+'</div>'
+      +'<button class="card click split" data-a="onbMic" style="'+(s.micGranted?"border-color:var(--acc);background:var(--acc-bg)":"")+'"><div><div style="font:600 16px var(--fb)">'+(s.micGranted?"Microfone liberado":"Permitir microfone")+'</div><div class="sub" style="font-size:12.5px">'+(s.micGranted?"pronto para detectar os tiros":"o navegador vai pedir a permissão")+'</div></div><span style="color:var(--acc);font:700 12px var(--fc);letter-spacing:.14em">'+(s.micGranted?"LIBERADO":"")+'</span></button>'
+      +'<div class="sub" style="font-size:13px">Sem microfone dá para treinar em dry-fire: o cronômetro larga e você para no último tiro.</div>';
+    cta="Ver o app em 3 passos";}
+  return '<div class="scr">'+bar
+    +'<div style="padding:8px 18px 12px"><div class="lbl" style="color:var(--acc)">'+kicker+'</div><div style="font:600 27px var(--fb);line-height:1.15;padding-top:4px">'+title+'</div></div>'
+    +'<div class="body">'+body+'</div>'
+    +'<div class="foot" style="flex-direction:column;gap:10px">'
+      +'<div style="display:flex;gap:11px;width:100%">'+(st>0?'<button class="btn sq" data-a="onbBack" aria-label="Voltar">‹</button>':'')+'<button class="btn p" data-a="onbNext">'+cta+'</button></div>'
+      +'<button class="link" data-a="onbSkip" style="align-self:center">'+(st===0?"Pular e explorar sozinho":"Pular")+'</button></div></div>';};
+Object.assign(ACT,{
+  onbNext:()=>{if(S.onbStep<2){S.onbStep++;render();return;}finishOnboard(true);},
+  onbBack:()=>{S.onbStep=Math.max(0,S.onbStep-1);render();},
+  onbSkip:()=>finishOnboard(false),
+  onbMic:async()=>{const ok=await startMic(DB.settings.audioDeviceId||undefined);stopMic();
+    if(ok){DB.settings.micGranted=true;DB.settings.mic=true;DB.settings.dry=false;save();render();toast("Microfone liberado");}
+    else toast("Permissão negada — dá para treinar em dry-fire");}
+});
+function finishOnboard(withTour){DB.settings.onboarded=true;save();S.tour=withTour?0:-1;go("home");}
+
+/* tour: recorta o elemento real da tela (posição medida no DOM, não fixa) */
+const TOUR=[["[data-a=menu]","Todo o resto vive no menu","Drills, desafios, progresso, perfil e configurações ficam aqui. A tela inicial fica limpa."],
+  ["[data-a=go][data-v=profile]","Seu perfil e recordes","Nome, arma e calibre padrão, atiradores deste aparelho e seus melhores números."],
+  [".btn.cta","Comece por aqui","Escolhe o drill, confirma o material e o cronômetro faz o resto."]];
+function paintTour(){const old=$("#tourOvl");if(old)old.remove();if(S.tour<0||S.screen!=="home")return;
+  const t=TOUR[S.tour];if(!t)return;const app=$("#app"),el=app.querySelector(t[0]);if(!el)return;
+  const a=app.getBoundingClientRect(),r=el.getBoundingClientRect(),top=r.top-a.top,left=r.left-a.left,below=top+r.height+14,cardTop=below+150<a.height;
+  const d=document.createElement("div");d.id="tourOvl";d.setAttribute("role","dialog");d.setAttribute("aria-label","Tour");
+  d.style.cssText="position:absolute;inset:0;z-index:40";
+  d.innerHTML='<div style="position:absolute;top:'+(top-6)+'px;left:'+(left-6)+'px;width:'+(r.width+12)+'px;height:'+(r.height+12)+'px;border:2px solid var(--acc);border-radius:16px;box-shadow:0 0 0 4px rgba(255,122,26,.18),0 0 0 9999px rgba(6,8,10,.78);pointer-events:none"></div>'
+    +'<div class="sheet" style="position:absolute;left:18px;right:18px;'+(cardTop?"top:"+below+"px":"bottom:"+(a.height-top+14)+"px")+';border-radius:16px;border:1px solid var(--bd);padding:16px">'
+    +'<div class="lbl" style="color:var(--acc)">'+(S.tour+1)+' de 3</div><div style="font:600 19px var(--fb)">'+t[1]+'</div><div class="sub" style="font-size:13.5px;color:var(--t2)">'+t[2]+'</div>'
+    +'<div style="display:flex;gap:11px"><button class="btn" data-a="tourSkip" style="min-height:50px">Pular tour</button><button class="btn p" data-a="tourNext" style="min-height:50px">'+(S.tour===2?"Entendi":"Próximo")+'</button></div></div>';
+  app.appendChild(d);}
+Object.assign(ACT,{tourNext:()=>{S.tour=S.tour>=2?-1:S.tour+1;render();},tourSkip:()=>{S.tour=-1;render();}});
+
+/* o tour é pintado depois do render (precisa das medidas reais dos elementos) */
+const _render3=render;render=function(){_render3();if(S.tour>=0)requestAnimationFrame(paintTour);};
+
+/* =============================================================================
+   BOTÃO VOLTAR (Android / gesto do navegador) — fecha o que está aberto em vez
+   de sair do app; nas telas de execução, não faz nada.
+   ============================================================================= */
+const PARENT={step1:"home",step2:"step1",detail:"progress",newDrill:"drills",code:"challenges",newChall:"challenges",ranking:"challenges",micperm:"step2",noshot:"step2",drills:"home",progress:"home",challenges:"home",profile:"home",settings:"home",onboard:"home"};
+function handleBack(){
+  if(S.tour>=0){S.tour=-1;render();return;}
+  if(S.menu||S.ask||S.sheet){S.menu=false;S.ask=null;S.sheet="";render();return;}
+  const sc=S.screen;
+  if(sc==="timer"||sc==="rest"||sc==="lab"||sc==="score")return;           /* série em andamento */
+  if(sc==="result"||sc==="block"){ACT.discard();return;}                    /* resultado não salvo */
+  if(sc==="mic"){go(S.micFrom||"settings");return;}
+  if(sc==="home")return;
+  go(PARENT[sc]||"home");}
+try{history.replaceState({cad:1},"");history.pushState({cad:2},"");}catch(e){}
+window.addEventListener("popstate",()=>{handleBack();try{history.pushState({cad:2},"");}catch(e){}});
+
+/* =============================================================================
+   INICIALIZAÇÃO
+   ============================================================================= */
+(function init(){
+  ensureGear();
+  /* quem já tem histórico não vê o onboarding (é a mesma base de dados da v7) */
+  if(DB.settings.onboarded==null){DB.settings.onboarded=!!(DB.sessions.length||userName());save();}
+  const last=lastSession();
+  pickDrill(last&&drillById(last.drillId)?last.drillId:(DB.drills[0]||{}).id);
+  S.rest=Math.max(0,Math.min(300,Math.round((DB.settings.blockRest||0)/5)*5));
+  if(!DB.settings.onboarded){S.screen="onboard";S.onbStep=0;}
+  render();
+  if(!window.isSecureContext)toast("Sem HTTPS o microfone não funciona — abra pelo endereço do Netlify.");
+  /* resultados de desafio que ficaram na fila sobem assim que houver rede */
+  if(FB_ENABLED&&navigator.onLine&&DB.outbox.length)ensureOnline().then(()=>flushOutbox());
+})();
+</script>
+</body>
+</html>
