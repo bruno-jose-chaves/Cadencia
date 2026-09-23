@@ -44,6 +44,7 @@ foi o que apagou o `index.html` do site em 23/09/2026.
 - **localStorage.** Chave `cadencia_v1`. Todas as versões leem e gravam o mesmo
   formato — trocar de versão não migra nem apaga dados.
 
+
 ## Pendências conhecidas
 
 - Microfone ainda capta tiros das baias vizinhas. A janela anti-eco resolveu a
