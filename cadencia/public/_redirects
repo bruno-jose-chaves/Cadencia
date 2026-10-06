@@ -1,2 +1,3 @@
-# Link antigo da v7 continua funcionando e cai na versao atual.
-/cadencia.html   /   301!
+# Link antigo da v7 continua funcionando e cai na versão atual.
+# Sintaxe da Cloudflare Pages: sem o "!" do Netlify, que aqui invalida a regra.
+/cadencia.html   /   301
