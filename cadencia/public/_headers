@@ -1,0 +1,10 @@
+# CADÊNCIA — cabeçalhos HTTP da Cloudflare Pages.
+# Equivalente ao bloco [[headers]] que existia no netlify.toml.
+# Objetivo: o usuário recebe a versão nova no primeiro reload,
+# em vez de ficar preso na versão em cache.
+
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/
+  Cache-Control: public, max-age=0, must-revalidate
