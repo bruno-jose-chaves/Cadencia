@@ -1,10 +1,34 @@
 # CADÊNCIA — cabeçalhos HTTP da Cloudflare Pages.
-# Equivalente ao bloco [[headers]] que existia no netlify.toml.
-# Objetivo: o usuário recebe a versão nova no primeiro reload,
-# em vez de ficar preso na versão em cache.
+# Sintaxe da Cloudflare: sem o "!" do Netlify, que aqui invalida a regra em silêncio.
 
-/*.html
+/*
+  # ---- Cache -------------------------------------------------------------
+  # O usuário recebe a versão nova no primeiro reload, em vez de ficar preso
+  # numa versão antiga em cache.
   Cache-Control: public, max-age=0, must-revalidate
 
-/
-  Cache-Control: public, max-age=0, must-revalidate
+  # ---- Enquadramento (v10.3) --------------------------------------------
+  # Ninguém embute o CADÊNCIA num iframe. Sem isto, um site qualquer podia
+  # carregar o app numa moldura invisível e induzir cliques (clickjacking).
+  X-Frame-Options: DENY
+
+  # ---- Permissões de hardware (v10.3) ------------------------------------
+  # O microfone é liberado só para o próprio site. Câmera, localização,
+  # pagamento, USB e sensores de movimento ficam desligados para todo mundo —
+  # o app não usa nenhum deles, e o que não se usa não precisa ficar aberto.
+  Permissions-Policy: microphone=(self), camera=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()
+
+  # ---- Origem do conteúdo (v10.3) ----------------------------------------
+  # Trava de onde o navegador aceita carregar código. Mesmo que algum dia
+  # entre um XSS no app, o navegador recusa executar script de fora desta
+  # lista — é a rede de segurança por baixo da higiene de esc() no código.
+  #   'unsafe-inline' em script/style é inevitável hoje: o app é um arquivo
+  #   único, com todo o JS e CSS embutidos. Trocar por hash exigiria build,
+  #   que é justamente o que esta arquitetura não tem.
+  #   gstatic = SDK do Firebase · googleapis/gstatic fonts = Barlow/JetBrains
+  #   firebaseio/googleapis = Firestore e autenticação anônima
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://firebasestorage.googleapis.com wss://*.firebaseio.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+
+  # ---- Vazamento pelo referenciador --------------------------------------
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
