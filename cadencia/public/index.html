@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CADÊNCIA v10.4 — DESAFIOS PÚBLICOS E FILTRO DE LINGUAGEM
+  CADÊNCIA v10.5 — DESAFIOS PÚBLICOS NO AR (índice + regras) E FILA SEM DISPUTA
   ----------------------------------------------------------------------------
   Arquivo único, sem build e sem dependência em tempo de execução.
   Publicado em public/index.html; cópia arquivada em versoes/cadencia-v10.html.
@@ -113,6 +113,18 @@
         LIMITE HONESTO: barra o óbvio e o disfarce simples. Não barra ofensa
         criativa nem escrita sem palavrão. Para isso só com denúncia e
         moderação humana.
+
+  O QUE MUDOU NA v10.5
+    J1  A lista pública passou a funcionar de verdade: as regras do Firestore
+        liberaram a listagem só para a consulta where(publico==true)+limit<=40,
+        e o índice composto (publico ASC, createdAt DESC) foi criado. Sondado
+        depois: sem o filtro, 403; filtrando por publico==false, 403; com
+        limit acima de 40, 403. O desafio por código segue inenumerável.
+    J2  Fila de resultado sem disputa. flushOutbox grava numa transação, e
+        disparar setPresence junto escrevia na mesma árvore: a transação
+        gravava e ainda assim rejeitava com 409, deixando o item na fila e o
+        selo "aguardando envio" aceso à toa. Agora em sequência. O dado nunca
+        se perdeu — o reenvio é best-por-uid, idempotente.
     —   Textos defasados: aviso que citava "endereço https do Netlify" e link
         morto para cadencia.html (a v7), que hoje o _redirects manda de volta
         para a raiz.
@@ -1294,7 +1306,14 @@ async function pushResult(code,metric,r){const ref=fb.db.collection("challenges"
  await fb.db.runTransaction(async tx=>{const snap=await tx.get(ref);if(snap.exists){const cur=snap.data();if(!metricBetter(r,cur,metric))return;}tx.set(ref,r);});}
 /* envia o resultado de um desafio online (enfileira sempre; tenta subir já se houver rede) */
 async function submitOnlineResult(ch,sess){const r={uid:fb.uid||null,name:onlineName(),total:sess.total,first:sess.first,hf:sess.hf,acc:sess.acc,nShots:sess.nShots,weapon:sess.weapon,cal:sess.cal,date:sess.date,splits:sess.splits||[]};
- queueResult(ch.code,ch.metric,r);if(await ensureOnline()){flushOutbox();setPresence(ch.code,"terminou");}}
+ queueResult(ch.code,ch.metric,r);
+ /* v10.5: flushOutbox grava o resultado numa TRANSAÇÃO. Disparar setPresence ao
+    mesmo tempo escrevia na mesma árvore de documento e provocava contenção: a
+    transação gravava e mesmo assim rejeitava com 409, deixando o item na fila.
+    O dado não se perdia (o reenvio é best-por-uid, idempotente), mas o selo
+    "1 resultado aguardando envio" ficava aceso sem motivo. Em sequência, não
+    disputam. Visto no teste de ponta a ponta com dois aparelhos. */
+ if(await ensureOnline()){await flushOutbox();setPresence(ch.code,"terminou");}}
 /* presença ao vivo (best-effort) */
 async function setPresence(code,status){if(!fb.ready||!fb.uid)return;try{await fb.db.collection("challenges").doc(code).collection("presence").doc(fb.uid).set({name:onlineName(),status,updatedAt:Date.now()});}catch(e){}}
 
@@ -2185,7 +2204,7 @@ SCREENS.settings=()=>{const s=DB.settings,late=backupLate(),dexp=daysSinceExport
       +'<button class="split" data-a="wipe" style="width:100%;background:none;border:0;padding:12px 0 0;text-align:left;cursor:pointer"><div style="font:500 15px var(--fb);color:var(--bad)">Apagar todos os dados</div><span style="color:var(--bad)">›</span></button>'
       +'<input type="file" id="fileImport" accept="application/json" style="display:none"></div>'
     +'<button class="link" data-a="reonboard">Rever primeiros passos</button>'
-    +'<div class="sub" style="font-size:12.5px;text-align:center;padding-top:4px">Cadência v10.4 · tudo salvo neste aparelho</div>'
+    +'<div class="sub" style="font-size:12.5px;text-align:center;padding-top:4px">Cadência v10.5 · tudo salvo neste aparelho</div>'
     +'</div><div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
 /* CSV com proteção contra fórmula (v7 S7) */
 function exportCSV(){const head=["data","atirador","drill","arma","calibre","distancia_m","tempo_total_s","tempo_1o_tiro_s","tiros","esperados","acertos","erros","pontos","precisao_pct","hit_factor","tempo_corrigido_s","splits_s","zonas","desafio","bloco_id","rep","bloco_tam"];
