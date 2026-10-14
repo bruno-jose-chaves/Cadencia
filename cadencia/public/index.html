@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CADÊNCIA v10.3 — DRILL-DOWN NO PROGRESSO E ENDURECIMENTO DE CABEÇALHOS
+  CADÊNCIA v10.4 — DESAFIOS PÚBLICOS E FILTRO DE LINGUAGEM
   ----------------------------------------------------------------------------
   Arquivo único, sem build e sem dependência em tempo de execução.
   Publicado em public/index.html; cópia arquivada em versoes/cadencia-v10.html.
@@ -89,6 +89,30 @@
         uma CSP que trava a origem de script, estilo, fonte e conexão. A CSP é
         a rede por baixo do esc(): mesmo que um XSS passasse, o navegador
         recusaria executar código de fora da lista.
+
+  O QUE MUDOU NA v10.4 (detector congelado)
+    I1  Desafios públicos. Até aqui só dava para entrar num desafio se alguém
+        mandasse o código. Agora qualquer um cria um desafio público e ele
+        aparece numa lista aberta: nome, drill, distância, critério, prazo e
+        quem está em primeiro. O ranking completo só depois de entrar.
+        O líder da lista é lido na hora da subcoleção de resultados, NÃO de um
+        campo gravado no desafio — gravar exigiria deixar qualquer um escrever
+        nesse campo, e aí daria para plantar um líder falso.
+        A listagem só funciona com a consulta exata where(publico==true) +
+        limit<=40; é essa regra que mantém o desafio por código inenumerável
+        mesmo com a lista pública aberta ao lado.
+    I2  Filtro de linguagem. Com desafio público, nome de atirador e nome de
+        desafio passam a ser lidos por estranhos. O filtro roda no aparelho,
+        antes de qualquer coisa subir: normaliza (minúscula, sem acento, desfaz
+        leet, colapsa letra repetida), compara com espaço e sem espaço, e só
+        casa raiz curta como palavra inteira — para não barrar "Paulo" por
+        conter "pau" nem "percurso" por conter "cu".
+        Aplicado em: nome do perfil, nome do desafio, nome/descrição/alvo do
+        drill, calibre e observações do laboratório. A nota pessoal da sessão
+        fica de fora de propósito: só o dono lê.
+        LIMITE HONESTO: barra o óbvio e o disfarce simples. Não barra ofensa
+        criativa nem escrita sem palavrão. Para isso só com denúncia e
+        moderação humana.
     —   Textos defasados: aviso que citava "endereço https do Netlify" e link
         morto para cadencia.html (a v7), que hoje o _redirects manda de volta
         para a raiz.
@@ -675,6 +699,98 @@ function ic(nome,tam){const d=ICN[nome];if(!d)return "";const t=tam||20;
   return '<svg class="ic-svg" viewBox="0 0 24 24" width="'+t+'" height="'+t+'" fill="none" stroke="currentColor" '
     +'stroke-width="'+(t<=16?2:1.75)+'" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';}
 
+
+/* =============================================================================
+   v10.4 — FILTRO DE LINGUAGEM
+   Com desafio público, nome de atirador e nome de desafio passam a ser lidos
+   por estranhos. O filtro roda no APARELHO, antes de qualquer coisa subir —
+   não há servidor para moderar depois.
+
+   COMO FUNCIONA
+   1) normaliza: minúscula, sem acento, desfaz leet (0→o, 3→e, @→a…), tira
+      pontuação e repetição de letra. "C@r@_L.H.0!!!" e "caaaarallho" caem no
+      mesmo lugar.
+   2) compara duas versões: a com espaços (para casar palavra inteira) e a
+      espremida sem espaço nenhum (pega "c a r a l h o" e "f-o-d-a").
+   3) raiz curta ou ambígua só casa como PALAVRA INTEIRA; raiz longa também
+      casa dentro da versão espremida.
+
+   O ERRO QUE EVITAMOS é o falso positivo: bloquear "percurso" por conter "cu",
+   ou "computador" por conter "puta", é pior do que deixar passar um palavrão —
+   quebra o uso de quem não fez nada. Por isso a lista ALLOW abaixo, e por isso
+   raízes de 2–4 letras nunca casam no meio de palavra.
+
+   LIMITE HONESTO: isto barra o óbvio e o disfarce simples. Não barra criatividade
+   determinada nem ofensa escrita sem palavrão. Para isso só com denúncia e
+   moderação humana — que é o passo seguinte se os desafios públicos pegarem.
+   ============================================================================= */
+const PALAVRAS_BLOQ=[
+  /* ofensa comum */
+  "caralho","porra","merda","bosta","foda","foder","fodase","buceta","boceta",
+  "cacete","puta","putaria","piranha","vagabunda","vagabundo","corno","otario",
+  "babaca","imbecil","idiota","escroto","arrombado","desgracado","filhadaputa",
+  "fdp","pqp","vtnc","tomanocu","tomarnocu","vsf","cu",
+  /* sexual explícito */
+  "pinto","rola","pau","xoxota","punheta","boquete","gozada","transar","trepar",
+  /* discriminação */
+  "viado","bicha","traveco","sapatao","macaco","crioulo","retardado","mongoloide",
+  "aleijado","gordo","nazista","hitler",
+  /* inglês mais comum */
+  "fuck","shit","bitch","asshole","cunt","nigger","faggot","whore","dick","pussy"
+];
+/* raízes curtas e as que vivem dentro de palavra inocente: só palavra inteira */
+/* raízes curtas e as que vivem dentro de palavra inocente: só palavra inteira,
+   sem sufixo nenhum além do plural — "pau" não pode casar com "Paulo". */
+const BLOQ_INTEIRA=new Set(["cu","pau","rola","pinto","foda","puta","gordo","macaco","bicha","dick","cunt","viado","shit","whore"]);
+/* palavras legítimas que contêm uma raiz — não podem ser barradas */
+const PALAVRAS_OK=[
+  "percurso","discurso","concurso","curso","escudo","cuidado","cuidar","circuito",
+  "documento","cumprir","cupula","acucar","computador","disputa","amputar","reputacao",
+  "deputado","imputar","paulo","paula","paulista","pausa","pauta","rolagem","rolamento",
+  "controle","pintor","pintura","apontar","transferir","transicao","transporte","classe"
+];
+function normLing(t){
+  return String(t||"").toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g,"")        /* tira acento */
+    .replace(/0/g,"o").replace(/@/g,"a").replace(/[1!|]/g,"i").replace(/3/g,"e")
+    .replace(/4/g,"a").replace(/5/g,"s").replace(/7/g,"t").replace(/\$/g,"s")
+    .replace(/[^a-z]+/g," ")                                 /* pontuação vira espaço */
+    .replace(/(.)\1{2,}/g,"$1")                              /* caaaaralho -> caralho */
+    .replace(/\s+/g," ").trim();
+}
+/* devolve a palavra barrada, ou "" quando o texto está limpo */
+function achaPalavrao(t){
+  const esp=normLing(t);if(!esp)return "";
+  const apertado=esp.replace(/ /g,"");
+  /* tira do texto espremido as palavras legítimas, senão "percurso" vira "cu" */
+  let limpo=apertado;
+  for(const ok of PALAVRAS_OK)limpo=limpo.split(normLing(ok)).join(" ");
+  const tokens=esp.split(" ");
+  for(const raiz of PALAVRAS_BLOQ){
+    /* Palavra inteira. Para raiz curta/ambígua, só o exato e o plural — era aqui
+       que "Paulo" casava com "pau" e "Pintor" com "pinto". Para raiz longa, um
+       sufixo curto ainda vale (putao, caralhos, fodase). */
+    const curta=BLOQ_INTEIRA.has(raiz);
+    /* "puta" -> "putao" troca a vogal final, nao acrescenta: por isso as duas formas */
+    const tronco=/[aeiou]$/.test(raiz)?raiz.slice(0,-1):raiz;
+    const vars=[raiz,raiz+"s",raiz+"es"];
+    for(const suf of ["ao","oes","ona","inho","inha","udo","uda"]){vars.push(raiz+suf);vars.push(tronco+suf);}
+    if(tokens.some(w=>vars.indexOf(w)>=0
+        ||(!curta&&w.length<=raiz.length+3&&w.indexOf(raiz)===0)))return raiz;
+    /* raiz longa também vale dentro do texto espremido (pega letra separada) */
+    if(!BLOQ_INTEIRA.has(raiz)&&raiz.length>=5&&limpo.indexOf(raiz)>=0)return raiz;
+  }
+  return "";
+}
+/* porta única de validação. Devolve "" se pode salvar, ou a mensagem do erro. */
+function validaTexto(t,rotulo,max){
+  const v=String(t||"").trim();
+  if(max&&v.length>max)return rotulo+": no máximo "+max+" caracteres.";
+  const p=achaPalavrao(v);
+  if(p)return "Esse texto tem palavra que não dá para usar"+(rotulo?" em "+rotulo.toLowerCase():"")+". Outras pessoas veem isso.";
+  return "";
+}
+
 const B={
   menu:'<button class="hb" data-a="menu" aria-label="Abrir menu">'+ic("menu",20)+'</button>',
   home:'<button class="hb" data-a="go" data-v="home" aria-label="Ir para o início">'+ic("inicio",20)+'</button>',
@@ -940,7 +1056,10 @@ const ACT={
   gun:v=>{DB.settings.gun=v;DB.settings.cal=calsFor(v)[0];S.showAddCal=false;save();render();},
   cal:v=>{DB.settings.cal=v;save();render();},
   addCalOpen:()=>{S.showAddCal=!S.showAddCal;render();},
-  addCalSave:()=>{const v=(($("#addCal")||{}).value||"").trim();if(!v){toast("Escreva o calibre");return;}const g=DB.settings.gun;
+  addCalSave:()=>{const v=(($("#addCal")||{}).value||"").trim();if(!v){toast("Escreva o calibre");return;}
+    /* v10.4: o calibre vai junto no resultado online, então passa pelo mesmo filtro */
+    {const err=validaTexto(v,"Calibre",16);if(err){toast(err);return;}}
+    const g=DB.settings.gun;
     DB.settings.customCals=DB.settings.customCals||{};const arr=DB.settings.customCals[g]=DB.settings.customCals[g]||[];
     if(calsFor(g).indexOf(v)<0)arr.push(v);DB.settings.cal=v;S.showAddCal=false;save();render();toast(v+" adicionado aos calibres de "+g);},
   dist:v=>{S.dist=Math.max(1,Math.min(50,Math.round(S.dist)+(+v)));render();},
@@ -1188,7 +1307,7 @@ function detachChal(){chalUnsub.forEach(u=>{try{u();}catch(e){}});chalUnsub=[];}
    ============================================================================= */
 /* micPermState: undefined = ainda não lido | "granted"/"denied"/"prompt"/"unknown" (v10 C5)
    permFrom: tela que abriu a permissão, para o botão voltar (v10 C5) */
-Object.assign(S,{listenResult:null,extAbas:false,period:"30",pcat:"all",report:"Resumo",sheet:"",detId:null,detEdit:false,dq:"",dfilter:"all",nd:null,micFrom:"step2",micErr:false,micDevs:[],pdrill:"",histMax:40,micPermState:undefined,permFrom:"step2"});
+Object.assign(S,{listenResult:null,extAbas:false,period:"30",pcat:"all",report:"Resumo",sheet:"",detId:null,detEdit:false,dq:"",dfilter:"all",nd:null,micFrom:"step2",micErr:false,micDevs:[],pdrill:"",pubList:null,pubMsg:"",histMax:40,micPermState:undefined,permFrom:"step2"});
 
 /* ---------- ganchos de entrada/saída de tela (mic e ranking têm recursos vivos) ---------- */
 const _render=render;let _prevScr=null;
@@ -1435,6 +1554,11 @@ Object.assign(ACT,{
   ndReload:()=>{S.nd.reload=!S.nd.reload;render();},
   ndAfter:v=>{const n=S.nd;n.after=Math.max(1,Math.min(Math.max(1,n.shots-1),n.after+(+v)));render();},
   ndSave:()=>{const n=S.nd;const name=(n.name||"").trim();if(!name){toast("Dê um nome ao drill");return;}
+    /* v10.4: o drill viaja dentro do desafio (drillSnap), então nome, descrição e
+       alvo são lidos por estranhos tanto quanto o nome do desafio. */
+    for(const [v,rot,max] of [[name,"Nome do drill",48],[n.desc,"Descrição",240],[n.target,"Alvo",60]]){
+      const err=validaTexto(v,rot,max);if(err){toast(err);return;}}
+    {}
     const data={desc:(n.desc||"").trim(),shots:n.shots,dist:n.dist,par:n.shots>0?Math.round(n.perShot*n.shots*100)/100:0,pen:n.pen,tag:n.tag,userTag:true,target:(n.target||"").trim(),reload:n.reload&&n.shots>1,after:n.reload&&n.shots>1?n.after:0};
     if(n.editId){const d=drillById(n.editId);if(!d)return;if(!d.builtin)data.name=name;Object.assign(d,data);save();S.nd=null;go("drills");toast("Drill atualizado");}
     else{const d=Object.assign({id:uid(),builtin:0,name},data);DB.drills.push(d);save();S.nd=null;pickDrill(d.id);go("drills");toast("Drill salvo");}},
@@ -1666,7 +1790,12 @@ Object.assign(ACT,{
   labJson:()=>{downloadBlob(labPrefix(LAB.lab)+".json",new Blob([JSON.stringify(labData(),null,1)],{type:"application/json"}));toast("Dados baixados");},
   labAudio:()=>{const b=LAB.lab.blob;if(!b)return;const ext=b.type.indexOf("webm")>=0?"webm":b.type.indexOf("ogg")>=0?"ogg":b.type.indexOf("mp4")>=0?"m4a":"audio";downloadBlob(labPrefix(LAB.lab)+"."+ext,b);toast("Áudio baixado");},
   /* upload opcional: exige Firebase Storage ativo; sem ele, o download local resolve */
-  labUp:async()=>{LAB.msg="Enviando…";render();try{if(!await ensureOnline())throw new Error("offline");await loadScript("https://www.gstatic.com/firebasejs/"+FB_VER+"/firebase-storage-compat.js");
+  labUp:async()=>{
+    /* v10.4: a observação sobe junto com a sessão de laboratório, então passa
+       pelo mesmo filtro. A nota pessoal da sessão NÃO passa — aquilo fica só no
+       aparelho e ninguém mais lê; filtrar o que é privado seria só estorvo. */
+    {const err=validaTexto(LAB.obs,"Observações",240);if(err){LAB.msg=err;render();return;}}
+    LAB.msg="Enviando…";render();try{if(!await ensureOnline())throw new Error("offline");await loadScript("https://www.gstatic.com/firebasejs/"+FB_VER+"/firebase-storage-compat.js");
     const st=firebase.storage(),l=LAB.lab,base="lab/"+fb.uid+"/"+l.id,data=labData();if(l.blob)await st.ref(base+".webm").put(l.blob);await st.ref(base+".json").putString(JSON.stringify(data));
     await fb.db.collection("labSessions").doc(l.id).set({uid:fb.uid,drill:l.meta.drill,detectedShots:l.meta.detectedShots,realShots:data.realShots,sampleRate:l.meta.sampleRate||null,storage:base,createdAt:Date.now()});LAB.msg="Enviado ✓";}
     catch(e){LAB.msg="Não deu para enviar. O Firebase Storage precisa estar ativo no console — use o download local.";}render();},
@@ -1783,6 +1912,7 @@ SCREENS.challenges=()=>{
     +'<div class="body cols2" style="gap:10px">'
     +(DB.outbox.length?'<div class="card" style="border-color:var(--acc)"><div style="font:600 15px var(--fb)">'+plural(DB.outbox.length,"resultado aguardando envio","resultados aguardando envio")+'</div><div class="sub">Sobem sozinhos quando a conexão voltar.</div></div>':'')
     +(list.length?list.map(card).join(""):'<div class="empty"><div style="font:600 18px var(--fb);color:var(--t1);padding-bottom:6px">Nenhum desafio ainda</div>Crie um e chame a galera, ou entre com o código de alguém.</div>')
+    +'<button class="card click split" data-a="pubList" style="padding:14px;border-color:var(--acc)"><div><div style="font:600 16px var(--fb)">Desafios públicos</div><div class="sub" style="font-size:12.5px">entre num desafio aberto, sem precisar conhecer ninguém</div></div><span style="color:var(--acc)">'+ic("chevron",16)+'</span></button>'
     +'<button class="dash" data-a="go" data-v="code">Entrar com código</button></div>'
     +'<div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
 
@@ -1790,7 +1920,9 @@ SCREENS.newChall=()=>{const n=S.nc;if(!n){S.screen="challenges";return SCREENS.c
   const typeCard=(k,t,sub)=>'<button class="card click" data-a="ncKind" data-v="'+k+'" style="flex:1;padding:13px'+(n.kind===k?";border-color:var(--acc);background:var(--acc-bg)":"")+'"><div style="font:600 16px var(--fb)">'+t+'</div><div class="sub" style="font-size:12.5px">'+sub+'</div></button>';
   return '<div class="scr">'+hdr(B.back("challenges","Voltar aos desafios"),"Criar desafio",B.home)
     +'<div class="body">'
-    +'<div style="display:flex;gap:11px">'+typeCard("online","Online","celulares diferentes, ranking ao vivo")+typeCard("local","Local","todos no mesmo aparelho")+'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:9px">'
+      +'<div style="display:flex;gap:11px">'+typeCard("online","Por código","só quem recebe o código entra")+typeCard("local","Local","todos no mesmo aparelho")+'</div>'
+      +typeCard("publico","Público","aparece na lista para qualquer um · quem entrar vê seu nome no ranking")+'</div>'
     +'<label class="card" style="display:block"><div class="lbl">Nome do desafio</div><input class="inp" id="ncName" value="'+esc(n.name)+'" placeholder="ex: Terça do Bill" style="width:100%;margin-top:8px;font:500 16px var(--fb)"></label>'
     +'<div class="card"><div class="lbl">Drill</div><div style="display:flex;flex-direction:column;gap:7px;padding-top:9px;max-height:210px;overflow:auto">'
       +DB.drills.map(d=>'<button class="card click" data-a="ncDrill" data-v="'+esc(d.id)+'" style="padding:11px 12px'+(n.drillId===d.id?";border-color:var(--acc)":"")+'"><div style="font:600 15px var(--fb)">'+esc(d.name)+'</div><div class="sub" style="font-size:12.5px">'+drillMeta(d)+'</div></button>').join("")+'</div></div>'
@@ -1841,16 +1973,75 @@ function attachRanking(){const ch=curChal();if(!ch)return;S.rankRows=null;S.rank
     chalUnsub.push(base.collection("presence").onSnapshot(sn=>{const live=[];sn.forEach(d=>{const p=d.data();if(p.status==="atirando"&&d.id!==fb.uid)live.push(p.name||"Alguém");});
       S.rankPres=live.length?live.join(", ")+(live.length>1?" estão atirando…":" está atirando…"):"";paintRanking();},()=>{}));});}
 /* exige um nome antes de competir online (o ranking é público para quem tem o código) */
-function needName(){if(userName())return true;toast("Coloque seu nome no perfil antes de competir online");go("profile");return false;}
+/* v10.4: porta única do online. Além de exigir nome, barra nome ofensivo — é
+   aqui que o nome deixa de ser um dado do aparelho e vira algo que estranho lê. */
+function needName(){
+  const n=userName();
+  if(!n){toast("Coloque seu nome no perfil antes de competir online");go("profile");return false;}
+  const err=validaTexto(n,"Seu nome",40);
+  if(err){toast(err+" Ajuste no perfil.");go("profile");return false;}
+  return true;}
 
 document.addEventListener("input",e=>{const el=e.target;if(!el)return;
   if(el.id==="ncName"&&S.nc)S.nc.name=el.value;
   else if(el.id==="codeIn"){const v=el.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6);S.code=v;S.codeFound=null;S.codeMsg="";render();const i=$("#codeIn");if(i){i.focus();}if(v.length===6)lookupCode(v);}
-  else if(el.id==="pfName"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.name=el.value;save();}}
+  else if(el.id==="pfName"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.name=el.value;save();
+    /* v10.4: avisa já na digitação, mas nao impede de salvar no aparelho — o
+       bloqueio de verdade e na hora de entrar/criar desafio online (needName). */
+    const err=validaTexto(el.value,"",40);if(err)toast(err);}}
   else if(el.id==="pfClub"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.clube=el.value;save();}}
   else if(el.id==="pfGunModel"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.model=el.value;save();}}
   else if(el.id==="onbName"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.name=el.value;save();}}
   else if(el.id==="onbClub"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.clube=el.value;save();}}});
+/* v10.4 — LISTA PÚBLICA
+   Só traz desafios com publico==true. A regra do Firestore exige exatamente esta
+   consulta: sem o where, a listagem é negada — é isso que mantém os desafios por
+   código inenumeráveis mesmo com a lista pública aberta ao lado. */
+async function carregaPublicos(){
+  S.pubMsg="Procurando desafios…";S.pubList=null;render();
+  if(!await ensureOnline()){S.pubMsg="Sem conexão — conecte para ver os desafios públicos.";render();return;}
+  try{
+    const sn=await fb.db.collection("challenges").where("publico","==",true)
+      .orderBy("createdAt","desc").limit(40).get();
+    const agora=Date.now(),out=[];
+    sn.forEach(d=>{const c=Object.assign({code:d.id},d.data());
+      if(c.endsAt&&c.endsAt<agora)return;            /* encerrado não aparece na lista */
+      out.push(c);});
+    /* Quem está na frente vem da subcoleção de resultados, lido na hora. Guardar
+       topName no próprio desafio exigiria deixar qualquer um escrever nesse campo,
+       e aí daria para plantar um líder falso. */
+    await Promise.all(out.slice(0,20).map(async c=>{
+      try{
+        const m=c.metric||"hf",asc=m!=="hf";         /* tempo e 1º tiro: menor é melhor */
+        const q=await fb.db.collection("challenges").doc(c.code).collection("results")
+          .orderBy(m,asc?"asc":"desc").limit(1).get();
+        q.forEach(r=>{const v=r.data();c.topName=v.name||"";c.topVal=v[m];});
+      }catch(e){}                                    /* sem líder é estado válido */
+    }));
+    S.pubList=out;S.pubMsg=out.length?"":"Nenhum desafio público aberto agora. Crie o primeiro.";
+  }catch(e){S.pubList=null;S.pubMsg="Não foi possível carregar a lista agora.";}
+  render();}
+
+/* A lista mostra só o que faz a pessoa decidir se entra: nome, drill, distância,
+   quantos já foram e quem está na frente. O ranking completo só depois de entrar. */
+SCREENS.publicos=()=>{
+  const l=S.pubList;
+  const card=c=>'<button class="card click" data-a="pubJoin" data-v="'+esc(c.code)+'" style="padding:14px">'
+    +'<div class="split" style="align-items:flex-start"><div style="min-width:0">'
+      +'<div style="font:600 17px var(--fb);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.name||"Desafio")+'</div>'
+      +'<div class="sub" style="font-size:13px;padding-top:3px">'+esc(c.drillName||"drill")+' · '+fnum(c.dist)+' m · '+metricLabel(c.metric)+'</div>'
+    +'</div><span style="color:var(--t3);flex:none">'+ic("chevron",16)+'</span></div>'
+    +'<div class="split" style="padding-top:10px;border-top:1px solid var(--track);margin-top:10px">'
+      +'<span class="sub" style="font-size:12.5px">'+(c.endsAt?"encerra em "+plural(Math.max(0,Math.ceil((c.endsAt-Date.now())/864e5)),"dia","dias"):"sem prazo")+'</span>'
+      +(c.topName?'<span class="sub" style="font-size:12.5px;color:var(--acc);max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">1º '+esc(c.topName)+(c.topVal!=null?" · "+fmt(+c.topVal,2):"")+'</span>':'<span class="sub" style="font-size:12.5px">seja o primeiro</span>')
+    +'</div></button>';
+  return '<div class="scr">'+hdr(B.back("challenges","Voltar aos desafios"),"Desafios públicos",B.home)
+    +'<div class="body">'
+    +'<div class="sub" style="font-size:13.5px;color:var(--t2);line-height:1.5">Qualquer um pode entrar. Ao enviar seu resultado, <b>seu nome aparece no ranking</b> para quem abrir este desafio.</div>'
+    +(S.pubMsg?'<div class="empty">'+esc(S.pubMsg)+'</div>':'')
+    +(l&&l.length?l.map(card).join(""):'')
+    +'</div><div class="foot"><button class="btn" data-a="pubReload">Atualizar</button><button class="btn p x" data-a="newChal">Criar desafio</button></div></div>';};
+
 async function lookupCode(code){S.codeMsg="Procurando…";render();
   if(!await ensureOnline()){S.codeMsg="Sem conexão — conecte para entrar num desafio online.";render();return;}
   try{const sn=await fb.db.collection("challenges").doc(code).get();
@@ -1867,15 +2058,20 @@ Object.assign(ACT,{
   ncDist:v=>{S.nc.dist=Math.max(1,Math.min(50,Math.round(S.nc.dist)+(+v)));render();},
   ncDays:v=>{S.nc.days=Math.max(1,Math.min(365,S.nc.days+(+v)));render();},
   ncSave:async()=>{const n=S.nc,name=(n.name||"").trim();if(!name){toast("Dê um nome ao desafio");return;}
+    {const err=validaTexto(name,"Nome do desafio",40);if(err){toast(err);return;}}
     const d=drillById(n.drillId);if(!d){toast("Escolha um drill");return;}
     const endsAt=Date.now()+n.days*864e5;
     if(n.kind==="local"){const ch={id:uid(),name,drillId:d.id,drillName:d.name,dist:n.dist,metric:n.metric,createdAt:Date.now(),endsAt};DB.challenges.push(ch);save();S.nc=null;S.chalId=ch.id;go("ranking");toast("Desafio criado");return;}
-    if(!needName())return;toast("Criando…");
+    if(!needName())return;
+    /* v10.4: público é o único tipo que aparece para estranhos. Nome do desafio,
+       do drill e do dono ficam visíveis na lista antes de qualquer um entrar. */
+    const pub=n.kind==="publico";
+    toast("Criando…");
     try{if(!await ensureOnline())throw new Error("offline");
       const code=newCode(),snap={name:d.name,shots:d.shots,par:d.par,pen:d.pen||0,dist:d.dist,target:d.target||""};
-      await fb.db.collection("challenges").doc(code).set({name,drillId:d.id,drillName:d.name,dist:n.dist,metric:n.metric,drillSnap:snap,endsAt,createdAt:Date.now(),ownerUid:fb.uid,ownerName:onlineName()});
-      const ch={id:code,code,online:true,name,drillId:d.id,drillName:d.name,dist:n.dist,metric:n.metric,drillSnap:snap,endsAt,ownerUid:fb.uid};
-      DB.challenges.push(ch);save();S.nc=null;S.chalId=ch.id;go("ranking");toast("Desafio criado · código "+code);}
+      await fb.db.collection("challenges").doc(code).set({name,drillId:d.id,drillName:d.name,dist:n.dist,metric:n.metric,drillSnap:snap,endsAt,createdAt:Date.now(),ownerUid:fb.uid,ownerName:onlineName(),publico:pub});
+      const ch={id:code,code,online:true,publico:pub,name,drillId:d.id,drillName:d.name,dist:n.dist,metric:n.metric,drillSnap:snap,endsAt,ownerUid:fb.uid};
+      DB.challenges.push(ch);save();S.nc=null;S.chalId=ch.id;go("ranking");toast((pub?"Desafio público criado · código ":"Desafio criado · código ")+code);}
     catch(e){toast("Sem conexão — não deu para criar o desafio online");}},
   openChal:v=>{S.chalId=v;go("ranking");},
   copyCode:()=>{const ch=curChal();if(!ch||!ch.code)return;const t=ch.code;
@@ -1884,6 +2080,14 @@ Object.assign(ACT,{
   chalRun:()=>{const ch=curChal();if(!ch)return;if(ch.online&&!needName())return;
     const dl=daysLeft(ch);if(dl!=null&&dl<=0){toast("Esse desafio já encerrou");return;}startTraining(ch);},
   chalRemove:()=>{const ch=curChal();if(!ch)return;ask("Remover da lista?",ch.online?"O desafio continua no ar para os outros; ele some só deste aparelho. Dá para voltar com o código "+ch.code+".":"O desafio sai deste aparelho. As sessões já salvas continuam no histórico.","Remover",()=>{DB.challenges=DB.challenges.filter(c=>c.id!==ch.id);save();go("challenges");toast("Desafio removido");},true);},
+  pubList:()=>{go("publicos");carregaPublicos();},
+  pubReload:()=>carregaPublicos(),
+  /* entrar num público é o mesmo que entrar por código — só que o código veio da lista */
+  pubJoin:v=>{const c=(S.pubList||[]).find(x=>x.code===v);if(!c)return;
+    if(!needName())return;
+    let ch=DB.challenges.find(x=>x.id===v);
+    if(!ch){ch={id:v,code:v,online:true,publico:true,name:c.name,drillId:c.drillId,drillName:c.drillName,dist:c.dist,metric:c.metric,drillSnap:c.drillSnap||null,endsAt:c.endsAt||null,ownerUid:c.ownerUid};DB.challenges.push(ch);save();}
+    S.chalId=ch.id;go("ranking");toast("Você entrou em "+ch.name);},
   codeJoin:async()=>{if(!S.codeFound){toast(S.code.length<6?"Faltam caracteres no código":"Nenhum desafio encontrado");return;}
     if(!needName())return;const c=S.codeFound,code=c.code;
     let ch=DB.challenges.find(x=>x.id===code);
@@ -1981,7 +2185,7 @@ SCREENS.settings=()=>{const s=DB.settings,late=backupLate(),dexp=daysSinceExport
       +'<button class="split" data-a="wipe" style="width:100%;background:none;border:0;padding:12px 0 0;text-align:left;cursor:pointer"><div style="font:500 15px var(--fb);color:var(--bad)">Apagar todos os dados</div><span style="color:var(--bad)">›</span></button>'
       +'<input type="file" id="fileImport" accept="application/json" style="display:none"></div>'
     +'<button class="link" data-a="reonboard">Rever primeiros passos</button>'
-    +'<div class="sub" style="font-size:12.5px;text-align:center;padding-top:4px">Cadência v10.3 · tudo salvo neste aparelho</div>'
+    +'<div class="sub" style="font-size:12.5px;text-align:center;padding-top:4px">Cadência v10.4 · tudo salvo neste aparelho</div>'
     +'</div><div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
 /* CSV com proteção contra fórmula (v7 S7) */
 function exportCSV(){const head=["data","atirador","drill","arma","calibre","distancia_m","tempo_total_s","tempo_1o_tiro_s","tiros","esperados","acertos","erros","pontos","precisao_pct","hit_factor","tempo_corrigido_s","splits_s","zonas","desafio","bloco_id","rep","bloco_tam"];
@@ -2082,7 +2286,7 @@ const _render3=render;render=function(){_render3();if(S.tour>=0)requestAnimation
    BOTÃO VOLTAR (Android / gesto do navegador) — fecha o que está aberto em vez
    de sair do app; nas telas de execução, não faz nada.
    ============================================================================= */
-const PARENT={errlog:"settings",step1:"home",step2:"step1",detail:"progress",newDrill:"drills",code:"challenges",newChall:"challenges",ranking:"challenges",micperm:"step2",noshot:"step2",drills:"home",progress:"home",challenges:"home",profile:"home",settings:"home",onboard:"home"};
+const PARENT={errlog:"settings",publicos:"challenges",step1:"home",step2:"step1",detail:"progress",newDrill:"drills",code:"challenges",newChall:"challenges",ranking:"challenges",micperm:"step2",noshot:"step2",drills:"home",progress:"home",challenges:"home",profile:"home",settings:"home",onboard:"home"};
 function handleBack(){
   if(S.tour>=0){S.tour=-1;render();return;}
   if(S.menu||S.ask||S.sheet){S.menu=false;S.ask=null;S.sheet="";render();return;}
