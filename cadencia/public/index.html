@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CADÊNCIA v10.5 — DESAFIOS PÚBLICOS NO AR (índice + regras) E FILA SEM DISPUTA
+  CADÊNCIA v10.6 — LINHA DO TEMPO DO LABORATÓRIO SOBE SOZINHA
   ----------------------------------------------------------------------------
   Arquivo único, sem build e sem dependência em tempo de execução.
   Publicado em public/index.html; cópia arquivada em versoes/cadencia-v10.html.
@@ -125,6 +125,24 @@
         gravava e ainda assim rejeitava com 409, deixando o item na fila e o
         selo "aguardando envio" aceso à toa. Agora em sequência. O dado nunca
         se perdeu — o reenvio é best-por-uid, idempotente.
+
+  O QUE MUDOU NA v10.6
+    K1  A linha do tempo do laboratório sobe sozinha ao concluir a sessão, para
+        o Firestore (gratuito). O áudio continua só no aparelho: o Storage do
+        Firebase exige plano pago, e a pergunta que trava o projeto — a cauda do
+        tiro engole o seguinte? — se responde com os NÚMEROS, não com o som.
+        O que sobe é só número: pico, rms, piso, limiar, guarda e tiro por
+        quadro. Sem áudio, sem nome, sem nada que identifique alguém.
+    K2  Formato CSV, não JSON. Documento do Firestore tem teto de 1 MB. Medido:
+        um quadro em JSON ocupa 136 bytes, em CSV ~42. Dois minutos de série dão
+        956 KB em JSON (estoura) e 295 KB em CSV (cabe). Se mesmo assim passar,
+        os quadros LONGE dos tiros são afinados e a resolução cheia é mantida em
+        volta de cada disparo — que é onde a decisão do detector acontece.
+    K3  O plano combinado ("só no Wi-Fi, fila em IndexedDB") caiu por terra, e é
+        bom que tenha caído: sem os ~5 MB de áudio o envio é de 70 a 300 KB, que
+        dado móvel aguenta; o Safari do iPhone não expõe navigator.connection,
+        então "só no Wi-Fi" nem daria para detectar direito; e uma fila desse
+        tamanho cabe no localStorage, então IndexedDB também não precisa.
     —   Textos defasados: aviso que citava "endereço https do Netlify" e link
         morto para cadencia.html (a v7), que hoje o _redirects manda de volta
         para a raiz.
@@ -1791,6 +1809,97 @@ function labModel(){const m=(/(iPhone|iPad|Android[^;)]{0,18}|Macintosh|Windows|
 function labPrefix(l){const d=new Date(l.meta.date),p=n=>String(n).padStart(2,"0");return "cadencia_lab_"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes())+"_"+labModel()+"_"+l.id;}
 function downloadBlob(name,blob){const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);}
 function labData(){const l=LAB.lab;return{meta:l.meta,realShots:LAB.real!==""?+LAB.real:null,obs:LAB.obs.trim(),timeline:l.tl};}
+
+/* =============================================================================
+   v10.6 — ENVIO AUTOMÁTICO DA LINHA DO TEMPO
+   O áudio continua só no aparelho: o Storage do Firebase exige plano pago, e a
+   pergunta que trava o projeto (a cauda do tiro engole o seguinte?) se responde
+   com os NÚMEROS, não com o som. A linha do tempo vai para o Firestore, que é
+   gratuito — e é só número: pico, rms, piso, limiar, guarda por quadro. Não há
+   áudio, nem nome, nem nada que identifique alguém.
+
+   POR QUE CSV E NÃO JSON
+   Documento do Firestore tem teto de 1 MB. Medido: um quadro em JSON ocupa
+   136 bytes; em CSV, ~42. Dois minutos de série dão 956 KB em JSON (estoura) e
+   295 KB em CSV (cabe com folga). O cabeçalho vai junto no documento para
+   ninguém precisar adivinhar a ordem das colunas depois.
+
+   O QUE MUDOU NO PLANO COMBINADO
+   A ideia era "só no Wi-Fi, com fila em IndexedDB". As duas coisas caem por
+   terra quando o áudio fica fora:
+     - sem os ~5 MB de áudio, o envio é de ~70 a 300 KB. Dado móvel aguenta.
+     - e o iPhone não informa o tipo de conexão (navigator.connection não existe
+       no Safari), então "só no Wi-Fi" nem daria para detectar direito.
+   A fila de pendentes cabe no localStorage, então IndexedDB também não precisa.
+   ============================================================================= */
+const LABQ_KEY="cadencia_labq_v1";
+const LAB_MAX_CSV=600*1024;     /* folga grande para o teto de 1 MB do documento */
+const LAB_COLS="tMs,phase,peak,rms,clip,floor,thresh,guard,shot";
+
+/* Serializa a linha do tempo em CSV. Se ficar grande demais, afina os quadros
+   LONGE dos tiros e mantém resolução cheia em volta de cada disparo — que é
+   exatamente onde a decisão do detector acontece. */
+function labCSV(tl){
+  const linha=f=>[f.tMs==null?"":f.tMs,f.phase==="run"?"r":"s",f.peak,f.rms,f.clip,f.floor,f.thresh,f.guard,f.shot].join(",");
+  let usados=tl;
+  let csv=tl.map(linha).join("\n");
+  let afinado=0;
+  if(csv.length>LAB_MAX_CSV){
+    const tiros=tl.filter(f=>f.shot).map(f=>f.tMs).filter(x=>x!=null);
+    const perto=f=>f.tMs!=null&&tiros.some(t=>Math.abs(f.tMs-t)<=400);
+    for(const passo of [2,3,5,8,12]){
+      usados=tl.filter((f,i)=>f.shot||perto(f)||i%passo===0);
+      csv=usados.map(linha).join("\n");
+      afinado=passo;
+      if(csv.length<=LAB_MAX_CSV)break;
+    }
+    if(csv.length>LAB_MAX_CSV){usados=usados.slice(-Math.floor(LAB_MAX_CSV/42));csv=usados.map(linha).join("\n");}
+  }
+  return{csv,quadros:usados.length,originais:tl.length,afinado};
+}
+/* monta o documento que vai para o Firestore */
+function labDoc(l,real,obs){
+  const c=labCSV(l.tl||[]);
+  return{uid:fb.uid,id:l.id,createdAt:Date.now(),
+    drill:l.meta.drill||"",detectedShots:l.meta.detectedShots||0,
+    realShots:real,expectedShots:l.meta.expectedShots||0,
+    sampleRate:l.meta.sampleRate||null,aparelho:labModel(),
+    processing:l.meta.processing||null,shots:l.meta.shots||[],
+    sens:DB.settings.sens,echoBlank:DB.settings.echoBlank||150,requireClip:!!DB.settings.requireClip,
+    obs:obs||"",colunas:LAB_COLS,quadros:c.quadros,quadrosOriginais:c.originais,afinado:c.afinado,
+    timeline:c.csv};
+}
+function labFila(){try{return JSON.parse(localStorage.getItem(LABQ_KEY)||"[]");}catch(e){return [];}}
+function labFilaGrava(a){try{localStorage.setItem(LABQ_KEY,JSON.stringify(a));}catch(e){}}
+/* Sobe o que estiver na fila. Idempotente: o id do documento é o id da sessão,
+   então reenviar sobrescreve em vez de duplicar. */
+async function labFlush(){
+  const fila=labFila();if(!fila.length)return{enviados:0,restam:0};
+  if(!navigator.onLine||!await ensureOnline())return{enviados:0,restam:fila.length};
+  let n=0;
+  for(const doc of fila.slice()){
+    try{
+      await fb.db.collection("labSessions").doc(doc.id).set(Object.assign({},doc,{uid:fb.uid}));
+      const r=labFila().filter(x=>x.id!==doc.id);labFilaGrava(r);n++;
+    }catch(e){
+      const r=labFila();const it=r.find(x=>x.id===doc.id);
+      if(it){it.tentativas=(it.tentativas||0)+1;
+        if(it.tentativas>=5)labFilaGrava(r.filter(x=>x.id!==doc.id)); /* sem retry eterno */
+        else labFilaGrava(r);}
+      break;                                   /* falhou uma, para e tenta depois */
+    }
+  }
+  return{enviados:n,restam:labFila().length};
+}
+/* chamado quando a pessoa fecha a tela do laboratório */
+async function labEnviaAuto(){
+  if(!FB_ENABLED||!LAB)return;
+  const doc=labDoc(LAB.lab,LAB.real!==""?+LAB.real:null,LAB.obs.trim());
+  const fila=labFila().filter(x=>x.id!==doc.id);fila.push(doc);labFilaGrava(fila);
+  const r=await labFlush();
+  if(r.enviados)toast("Laboratório enviado para análise");
+  else if(r.restam)toast("Laboratório na fila — sobe quando houver conexão");
+}
 SCREENS.lab=()=>{if(!LAB){S.screen="home";return SCREENS.home();}const l=LAB.lab,m=l.meta,p=m.processing;
   return '<div class="scr">'+hdr('<span style="width:44px"></span>',"Laboratório",'<span style="width:44px"></span>')
     +'<div class="ttl" style="padding-top:0">Sessão de laboratório<div class="sub">'+esc(m.drill)+(T&&T.reps>1?' · rep '+m.rep+' de '+T.reps:'')+' · áudio + linha do tempo do detector</div></div>'
@@ -1801,7 +1910,12 @@ SCREENS.lab=()=>{if(!LAB){S.screen="home";return SCREENS.home();}const l=LAB.lab
     +'<div class="sub" style="font-size:12.5px">Áudio do aparelho: '+(p?"ganho auto "+(p.autoGainControl?"ligado":"desligado")+" · redução de ruído "+(p.noiseSuppression?"ligada":"desligada"):"não informado")+' · '+l.tl.length+' quadros registrados.</div>'
     +(l.blob?'':'<div class="warn" style="text-align:left">'+(l.recErr?"Este aparelho não gravou o áudio — os dados (JSON) continuam disponíveis.":"Áudio vazio.")+'</div>')
     +'<div style="display:flex;gap:11px">'+(l.blob?'<button class="btn" data-a="labAudio">Baixar áudio</button>':'')+'<button class="btn" data-a="labJson">Baixar dados</button></div>'
-    +(FB_ENABLED?'<button class="btn" data-a="labUp" style="flex:none;min-height:52px">Enviar ao Firebase</button>':'')
+    /* v10.6: o envio virou automático ao concluir. O que fica aqui é o estado —
+       e um botão para forçar quando algo ficou preso na fila. */
+    +(FB_ENABLED?(()=>{const f=labFila().length;
+      return '<div class="note" style="margin:0">A linha do tempo (só números: pico, piso, limiar e guarda por quadro) sobe sozinha ao concluir, para a análise do detector. O áudio fica só neste aparelho.'
+        +(f?' <b>'+plural(f,"sessão esperando envio","sessões esperando envio")+'.</b>':'')+'</div>'
+        +(f?'<button class="btn" data-a="labUp" style="flex:none;min-height:52px">Tentar enviar agora</button>':'');})():'')
     +(LAB.msg?'<div class="sub" style="font-size:13px;color:var(--t2)">'+esc(LAB.msg)+'</div>':'')
     +'</div><div class="foot"><button class="btn p" data-a="labGo">Continuar</button></div></div>';};
 document.addEventListener("input",e=>{if(!LAB||!e.target)return;if(e.target.id==="labReal")LAB.real=e.target.value.replace(/[^0-9]/g,"");else if(e.target.id==="labObs")LAB.obs=e.target.value;});
@@ -1809,16 +1923,18 @@ Object.assign(ACT,{
   labJson:()=>{downloadBlob(labPrefix(LAB.lab)+".json",new Blob([JSON.stringify(labData(),null,1)],{type:"application/json"}));toast("Dados baixados");},
   labAudio:()=>{const b=LAB.lab.blob;if(!b)return;const ext=b.type.indexOf("webm")>=0?"webm":b.type.indexOf("ogg")>=0?"ogg":b.type.indexOf("mp4")>=0?"m4a":"audio";downloadBlob(labPrefix(LAB.lab)+"."+ext,b);toast("Áudio baixado");},
   /* upload opcional: exige Firebase Storage ativo; sem ele, o download local resolve */
+  /* v10.6: antes isto subia áudio+json para o Storage, que exige plano pago e
+     nunca chegou a funcionar. Agora é só forçar a fila da linha do tempo. */
   labUp:async()=>{
-    /* v10.4: a observação sobe junto com a sessão de laboratório, então passa
-       pelo mesmo filtro. A nota pessoal da sessão NÃO passa — aquilo fica só no
-       aparelho e ninguém mais lê; filtrar o que é privado seria só estorvo. */
     {const err=validaTexto(LAB.obs,"Observações",240);if(err){LAB.msg=err;render();return;}}
-    LAB.msg="Enviando…";render();try{if(!await ensureOnline())throw new Error("offline");await loadScript("https://www.gstatic.com/firebasejs/"+FB_VER+"/firebase-storage-compat.js");
-    const st=firebase.storage(),l=LAB.lab,base="lab/"+fb.uid+"/"+l.id,data=labData();if(l.blob)await st.ref(base+".webm").put(l.blob);await st.ref(base+".json").putString(JSON.stringify(data));
-    await fb.db.collection("labSessions").doc(l.id).set({uid:fb.uid,drill:l.meta.drill,detectedShots:l.meta.detectedShots,realShots:data.realShots,sampleRate:l.meta.sampleRate||null,storage:base,createdAt:Date.now()});LAB.msg="Enviado ✓";}
-    catch(e){LAB.msg="Não deu para enviar. O Firebase Storage precisa estar ativo no console — use o download local.";}render();},
-  labGo:()=>{const c=LAB&&LAB.cont;LAB=null;if(c)c();}
+    LAB.msg="Enviando…";render();
+    const r=await labFlush();
+    LAB.msg=r.enviados?"Enviado para análise":(r.restam?"Sem conexão — fica na fila":"Nada na fila");
+    render();},
+  labGo:()=>{const c=LAB&&LAB.cont;
+    /* v10.6: enfileira e tenta subir ANTES de soltar o LAB, senão o dado some */
+    labEnviaAuto().catch(()=>{});
+    LAB=null;if(c)c();}
 });
 
 /* =============================================================================
@@ -2204,7 +2320,7 @@ SCREENS.settings=()=>{const s=DB.settings,late=backupLate(),dexp=daysSinceExport
       +'<button class="split" data-a="wipe" style="width:100%;background:none;border:0;padding:12px 0 0;text-align:left;cursor:pointer"><div style="font:500 15px var(--fb);color:var(--bad)">Apagar todos os dados</div><span style="color:var(--bad)">›</span></button>'
       +'<input type="file" id="fileImport" accept="application/json" style="display:none"></div>'
     +'<button class="link" data-a="reonboard">Rever primeiros passos</button>'
-    +'<div class="sub" style="font-size:12.5px;text-align:center;padding-top:4px">Cadência v10.5 · tudo salvo neste aparelho</div>'
+    +'<div class="sub" style="font-size:12.5px;text-align:center;padding-top:4px">Cadência v10.6 · tudo salvo neste aparelho</div>'
     +'</div><div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
 /* CSV com proteção contra fórmula (v7 S7) */
 function exportCSV(){const head=["data","atirador","drill","arma","calibre","distancia_m","tempo_total_s","tempo_1o_tiro_s","tiros","esperados","acertos","erros","pontos","precisao_pct","hit_factor","tempo_corrigido_s","splits_s","zonas","desafio","bloco_id","rep","bloco_tam"];
@@ -2338,6 +2454,9 @@ window.addEventListener("popstate",()=>{handleBack();try{history.pushState({cad:
   if(!window.isSecureContext)toast("Sem HTTPS o microfone não funciona — abra pelo endereço https do site.");
   /* resultados de desafio que ficaram na fila sobem assim que houver rede */
   if(FB_ENABLED&&navigator.onLine&&DB.outbox.length)ensureOnline().then(()=>flushOutbox());
+  /* v10.6: o que ficou preso no estande sobe quando a conexão voltar */
+  if(FB_ENABLED&&navigator.onLine&&labFila().length)labFlush().catch(()=>{});
+  window.addEventListener("online",()=>{if(FB_ENABLED&&labFila().length)labFlush().catch(()=>{});});
 })();
 </script>
 </body>
