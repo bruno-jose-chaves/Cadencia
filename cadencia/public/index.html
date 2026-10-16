@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  CADÊNCIA v10.6 — LINHA DO TEMPO DO LABORATÓRIO SOBE SOZINHA
+  CADÊNCIA v10.7 — ESCALA TIPOGRÁFICA E DESAFIO QUE FECHA
   ----------------------------------------------------------------------------
   Arquivo único, sem build e sem dependência em tempo de execução.
   Publicado em public/index.html; cópia arquivada em versoes/cadencia-v10.html.
@@ -147,6 +147,62 @@
         morto para cadencia.html (a v7), que hoje o _redirects manda de volta
         para a raiz.
 
+  O QUE MUDOU NA v10.7
+    T1  ESCALA TIPOGRÁFICA. Eram 32 tamanhos de fonte distintos, 24 deles vindos
+        de estilo inline. Não era desenho: 12 / 12.5 / 13 faziam o mesmo serviço,
+        e 13.5 / 14 / 14.5 / 15 / 15.5 também — lado a lado na mesma tela isso lê
+        como desalinhamento. Agora são 10 degraus com nome (--f-micro a --f-n4),
+        244 declarações mapeadas. O ganho que importa não é estético: mudar o
+        tamanho do texto do app inteiro passou a ser a edição de dez linhas.
+        Ficaram FORA de propósito os dois números gigantes do cronômetro
+        (.clk 54px, .big70 70px): cada um aparece em um lugar só, não há deriva
+        ali, e amarrá-los a um token seria indireção sem ganho.
+    T2  CAMPO DE TEXTO NÃO DÁ MAIS ZOOM NO IOS. O iOS amplia a tela sozinho em
+        qualquer campo focável com fonte abaixo de 16px. Os 10 campos .inp
+        estavam em 14px, as 2 textareas em 14.5 e o seletor de microfone em 14 —
+        13 campos, e toda vez que se tocava num deles a tela pulava. Todos em
+        17px agora, que também é melhor para digitar de luva.
+    T3  REGRA MORTA. Dentro de @media (max-height:520px) o .ttl estava declarado
+        DUAS vezes: a de 17px era sobrescrita pela de 18px e nunca se aplicava.
+        Mesma família do bug de ordem de media query da v9. Ficou a de 17px, que
+        é o degrau certo e ainda devolve 1px de altura em tela curta.
+    T4  Duas regras redundantes a menos: .zb b de 26px em paisagem (ficava a 2px
+        do degrau de cima) e o font-size de 19px do botão da home (o que
+        diferencia aquele botão é a caixa de 46px, não a fonte).
+
+    D1  FECHAR DESAFIO. "Fechar" NÃO é "apagar", por duas razões independentes:
+        o Firestore não apaga subcoleção em cascata pelo SDK do cliente (os
+        resultados ficariam órfãos e invisíveis, ocupando cota), e a sondagem das
+        regras em 16/10 mostrou que NINGUÉM apaga desafio, nem o dono — não
+        existe regra de delete. Então encerrar é um campo: `encerrado: true`.
+        O ranking continua legível, para de aceitar tentativa, sai da lista
+        pública, e é reversível.
+    D2  EDITAR DESAFIO, com trava por justiça e não por dado. Nome e prazo são
+        sempre editáveis. Drill, distância e critério travam no instante em que
+        o primeiro resultado entra: o resultado guarda tempo, hit factor,
+        precisão e 1º tiro, então reordenar seria tecnicamente possível — mas
+        mudaria quem ganhou, por cima de quem já atirou, sem a pessoa saber.
+    D3  A trava é confirmada no SERVIDOR na hora de salvar, não só no aparelho.
+        rowsFor() pode não ter visto um resultado que existe (ranking nunca
+        aberto, cache vazio), e aí a trava seria decorativa justamente no caso
+        em que ela importa. Uma leitura, só quando um campo travável mudou.
+    D4  SERVIDOR PRIMEIRO, APARELHO DEPOIS, em toda alteração de desafio online.
+        Se o Firestore recusar, o estado local não muda. O contrário deixaria o
+        dono vendo uma coisa e os participantes outra, sem nada avisando.
+        E desafio online exige conexão para mudar: fila de alteração faria o dono
+        achar que mudou enquanto os outros ainda jogam pelo estado antigo.
+    D5  Reabrir também tira o prazo vencido. Sem isso chalFechado() continuaria
+        verdadeiro pelo prazo e o botão pareceria não fazer nada.
+    D6  Quem só participa continua com o X, que tira o desafio da lista DELE e
+        nada mais — o rodapé do ranking troca o X pela engrenagem só para o dono.
+        Encerrado, o botão de tentativa fica inerte em vez de desaparecer: a tela
+        tem que dizer por que não dá para atirar, não apenas não oferecer.
+    —   LIMITE CONHECIDO: o bloqueio de tentativa em desafio encerrado é do APP,
+        não da regra do Firestore. A regra do resultado olha o uid de quem
+        escreve, não o estado do desafio pai; checar o pai custaria uma leitura
+        por escrita e uma regra nova. Para treino entre conhecidos é
+        proporcional — mas está escrito para não virar surpresa depois.
+
   MOTOR (copiado da v7 sem alteração — DETECÇÃO CONGELADA):
     dados (load/save/migrateDrills), áudio (startMic/micFrame/beep) e detector
     (newDetector/updateFloor/effThresh/isShot). Alterar só com liberação
@@ -199,6 +255,34 @@
   --sal:env(safe-area-inset-left,0px);  --sar:env(safe-area-inset-right,0px);
   /* v10.2: uma unica duracao e curva para TODA mudanca de estado do app */
   --mov:140ms cubic-bezier(.2,.7,.3,1);
+  /* ===========================================================================
+     v10.7 — ESCALA TIPOGRAFICA
+     O app tinha 32 tamanhos de fonte distintos, 24 deles vindos de estilo
+     inline. Nao era desenho: 12 / 12.5 / 13 faziam o mesmo trabalho, e
+     13.5 / 14 / 14.5 / 15 / 15.5 tambem. Lado a lado na mesma tela isso le
+     como desalinhamento.
+
+     Agora sao 10 degraus com nome. O ganho que importa nao e estetico: mudar
+     o tamanho do texto do app inteiro (ler no sol, com o celular longe do
+     olho) passou a ser a edicao destas dez linhas, em vez de cacar ~200
+     declaracoes espalhadas.
+
+     FORA DA ESCALA, DE PROPOSITO: os dois numeros gigantes do cronometro
+     (.clk 54px e .big70 70px na base). Sao a assinatura visual do app e cada
+     um aparece em um lugar so — nao ha deriva para corrigir ali, e amarra-los
+     a um token so adicionaria indirecao sem ganho.
+     ========================================================================= */
+  --f-micro:10px;    /* micro-rotulo em caixa alta (.rl pequeno, topline)      */
+  --f-rot:11px;      /* rotulo em caixa alta (.lbl, .hk, resumo do "Avancado") */
+  --f-aux:12.5px;    /* texto auxiliar, legenda, subtitulo                     */
+  --f-base:14px;     /* corpo                                                  */
+  --f-forte:15px;    /* corpo destacado, texto de botao                        */
+  --f-ttl:17px;      /* titulo de cartao, botao principal e CAMPO DE TEXTO     */
+  --f-n1:20px;       /* titulo de tela / numero pequeno                        */
+  --f-n2:24px;       /* numero medio                                           */
+  --f-n3:28px;       /* numero grande                                          */
+  --f-n4:40px;       /* numero gigante                                         */
+
   --fb:Barlow,system-ui,-apple-system,"Segoe UI",sans-serif;
   --fc:"Barlow Condensed",Barlow,system-ui,sans-serif;
   --fm:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
@@ -212,7 +296,7 @@
    ha espaco de sobra (acima de 480px, onde a coluna realmente flutua). */
 html,body{margin:0;height:100%;background:var(--bg)}
 @media (min-width:481px){html,body{background:var(--page)}}
-body{color:var(--t1);font:400 15px var(--fb);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+body{color:var(--t1);font:400 var(--f-forte) var(--fb);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
 button{font-family:inherit;color:inherit}
 a{color:var(--acc)}
 input,textarea{outline:none;font-family:inherit}
@@ -235,24 +319,26 @@ input::placeholder,textarea::placeholder{color:var(--ph)}
 /* cabeçalho de 3 posições */
 .hdr{padding:16px 18px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .hdr.home{padding:18px 18px 14px}
-.hb{width:44px;height:44px;flex:none;border-radius:12px;background:var(--surf);border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--t2);cursor:pointer;padding:0}
-.hdr.home .hb{width:46px;height:46px;border-radius:14px;font-size:19px}
+.hb{width:44px;height:44px;flex:none;border-radius:12px;background:var(--surf);border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:var(--f-n1);color:var(--t2);cursor:pointer;padding:0}
+.hdr.home .hb{width:46px;height:46px;border-radius:14px}
 .hb:hover{background:#1d222a}
-.hb.me{border-color:var(--acc);color:var(--acc);font:700 12px var(--fc);letter-spacing:.06em}
-.hk{flex:1;min-width:0;text-align:center;font:700 11px var(--fc);letter-spacing:.2em;color:var(--t3);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hk.brand{font-size:12px;letter-spacing:.26em;color:var(--acc)}
+.hb.me{border-color:var(--acc);color:var(--acc);font:700 var(--f-aux) var(--fc);letter-spacing:.06em}
+.hk{flex:1;min-width:0;text-align:center;font:700 var(--f-rot) var(--fc);letter-spacing:.2em;color:var(--t3);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hk.brand{font-size:var(--f-aux);letter-spacing:.26em;color:var(--acc)}
 .prog{padding:0 18px 8px;display:flex;gap:6px}
 .prog i{flex:1;height:3px;border-radius:2px;background:var(--bd)}
 .prog i.on{background:var(--acc)}
 
 /* texto */
-.ttl{padding:8px 18px 10px;font:600 24px var(--fb);line-height:1.15}
+.ttl{padding:8px 18px 10px;font:600 var(--f-n2) var(--fb);line-height:1.15}
 .ttl .sub{padding-top:2px}
-.sub{font:400 13.5px var(--fb);color:var(--t3);line-height:1.4}
-.lbl{font:700 11px var(--fc);letter-spacing:.18em;text-transform:uppercase;color:var(--t3)}
+.sub{font:400 var(--f-base) var(--fb);color:var(--t3);line-height:1.4}
+.lbl{font:700 var(--f-rot) var(--fc);letter-spacing:.18em;text-transform:uppercase;color:var(--t3)}
 .mono{font-family:var(--fm)}
 /* v10.2: os icones herdam a cor do pai e nunca esticam */
 .ic-svg{display:block;flex:none}
+/* v10.7: botao inerte — usado quando o desafio esta encerrado */
+.btn[disabled]{opacity:.5;cursor:default}
 /* v10.3 — DRILL-DOWN
    Barras do gráfico e linhas de relatório deixaram de ser enfeite: cada uma leva
    à sessão (ou ao drill) por trás do número. Precisam parecer tocáveis sem virar
@@ -276,7 +362,7 @@ button.card,.card.click{cursor:pointer}
 button.card:hover,.card.click:hover{border-color:var(--hov)}
 .card.sel{border:1.5px solid var(--acc)}
 .card.sel:hover{border-color:var(--acc)}
-.card .nm{font:600 17px var(--fb)}
+.card .nm{font:600 var(--f-ttl) var(--fb)}
 .split{display:flex;justify-content:space-between;align-items:center;gap:12px}
 /* v10.2: as linhas de opcao da Config e do detalhe sao <button class="split">
    com padding inline de 12px, o que dava 29-30px de alvo. Um piso de 48px aqui
@@ -284,39 +370,41 @@ button.card:hover,.card.click:hover{border-color:var(--hov)}
 button.split{min-height:48px}
 
 /* botões */
-.btn{flex:1;min-height:58px;border-radius:16px;border:1px solid var(--ctl);background:none;color:var(--t2);display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 16px;text-align:center;line-height:1.15;font:500 15px var(--fb);cursor:pointer;text-decoration:none}
+.btn{flex:1;min-height:58px;border-radius:16px;border:1px solid var(--ctl);background:none;color:var(--t2);display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 16px;text-align:center;line-height:1.15;font:500 var(--f-forte) var(--fb);cursor:pointer;text-decoration:none}
 .btn:hover{border-color:var(--hov)}
-.btn.p{background:var(--acc);border-color:var(--acc);color:#101317;font:600 17px var(--fb)}
+.btn.p{background:var(--acc);border-color:var(--acc);color:#101317;font:600 var(--f-ttl) var(--fb)}
 .btn.p:hover{background:var(--acc-h);border-color:var(--acc-h)}
 .btn.big{min-height:68px;border-radius:18px}
-.btn.cta{font:700 16px var(--fc);letter-spacing:.18em}
-.btn.sq{flex:none;width:60px;font-size:20px}
+.btn.cta{font:700 var(--f-ttl) var(--fc);letter-spacing:.18em}
+.btn.sq{flex:none;width:60px;font-size:var(--f-n1)}
 .btn.x{flex:1.6}
 .btn.danger{border-color:var(--bad-bd);color:var(--bad)}
-.btn.bad{background:var(--bad);border-color:var(--bad);color:#101317;font:600 16px var(--fb)}
+.btn.bad{background:var(--bad);border-color:var(--bad);color:#101317;font:600 var(--f-ttl) var(--fb)}
 .btn.none{flex:none}
 /* v10.2: o link tinha 17px de altura de toque. Virou 44, o minimo confortavel
    — e esses links ("Editar tiros", "Repontuar") sao usados com luva. */
-.link{background:none;border:0;padding:10px 0;min-height:44px;display:inline-flex;align-items:center;text-align:left;font:500 14px var(--fb);color:var(--acc);cursor:pointer;align-self:flex-start}
-.dash{border:1px dashed var(--ctl);border-radius:14px;padding:13px;text-align:center;font:500 14px var(--fb);color:var(--t2);background:none;cursor:pointer;width:100%}
+.link{background:none;border:0;padding:10px 0;min-height:44px;display:inline-flex;align-items:center;text-align:left;font:500 var(--f-base) var(--fb);color:var(--acc);cursor:pointer;align-self:flex-start}
+.dash{border:1px dashed var(--ctl);border-radius:14px;padding:13px;text-align:center;font:500 var(--f-base) var(--fb);color:var(--t2);background:none;cursor:pointer;width:100%}
 
 /* chips de filtro */
 .chips{display:flex;gap:7px;flex-wrap:wrap;padding:0 18px 12px}
-.chip{min-height:44px;border-radius:99px;padding:0 14px;border:1px solid var(--ctl);background:none;color:var(--t3);font:500 12px var(--fc);letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.chip{min-height:44px;border-radius:99px;padding:0 14px;border:1px solid var(--ctl);background:none;color:var(--t3);font:500 var(--f-aux) var(--fc);letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
 .chip.on{background:var(--acc);border-color:var(--acc);color:#101317}
 
 /* grades de opção (arma / calibre) */
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;padding-top:9px}
-.opt{min-height:44px;border-radius:10px;padding:0 3px;border:1px solid var(--ctl);background:none;color:var(--t2);font:500 13.5px var(--fb);cursor:pointer}
+.opt{min-height:44px;border-radius:10px;padding:0 3px;border:1px solid var(--ctl);background:none;color:var(--t2);font:500 var(--f-base) var(--fb);cursor:pointer}
 .opt.m{font-family:var(--fm)}
 .opt.on{background:var(--acc);border-color:var(--acc);color:#101317}
-.opt.add{border:1px dashed var(--hov);font:500 13px var(--fb)}
-.inp{flex:1;min-width:0;min-height:48px;background:var(--bg);border:1.5px solid var(--acc);border-radius:10px;padding:11px 12px;font:500 14px var(--fm);color:var(--t1)}
+.opt.add{border:1px dashed var(--hov);font:500 var(--f-aux) var(--fb)}
+/* v10.7: --f-ttl (17px) e nao --f-base (14px) por causa do iOS: campo com
+   fonte abaixo de 16px faz a tela dar zoom sozinha quando recebe o foco. */
+.inp{flex:1;min-width:0;min-height:48px;background:var(--bg);border:1.5px solid var(--acc);border-radius:10px;padding:11px 12px;font:500 var(--f-ttl) var(--fm);color:var(--t1)}
 
 /* stepper */
 .stp{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:9px}
-.sb{width:44px;height:44px;flex:none;border:1px solid var(--ctl);border-radius:10px;background:none;color:var(--t2);font-size:18px;cursor:pointer}
-.num{font:700 21px var(--fm);text-align:center;white-space:nowrap}
+.sb{width:44px;height:44px;flex:none;border:1px solid var(--ctl);border-radius:10px;background:none;color:var(--t2);font-size:var(--f-n1);cursor:pointer}
+.num{font:700 var(--f-n1) var(--fm);text-align:center;white-space:nowrap}
 
 /* toggle 48x28 */
 /* v10.2: a bolinha anda por transform (animavel) em vez de pular de uma ponta
@@ -329,22 +417,22 @@ button.split{min-height:48px}
 /* KPIs */
 .kpis{display:flex;gap:9px;padding:0 18px 13px}
 .kpi{flex:1;background:var(--surf);border:1px solid var(--bd);border-radius:14px;padding:12px 6px;text-align:center;min-width:0}
-.kpi b{display:block;font:700 22px var(--fm)}
-.kpi span{font:700 9.5px var(--fc);letter-spacing:.15em;color:var(--t3);text-transform:uppercase}
+.kpi b{display:block;font:700 var(--f-n2) var(--fm)}
+.kpi span{font:700 var(--f-micro) var(--fc);letter-spacing:.15em;color:var(--t3);text-transform:uppercase}
 .kpi.acc{background:var(--acc-bg);border-color:var(--acc)}
 .kpi.acc b,.kpi.acc span{color:var(--acc)}
 .kpi b span{font:inherit;letter-spacing:normal;text-transform:none;color:inherit} /* valores com cor própria dentro do KPI */
 
 /* telas de execução (timer / descanso / sem tiro): legíveis a ~2 m */
 .exec{background:var(--exec);padding:20px 20px calc(20px + var(--sab));gap:18px;position:relative;overflow:auto;-webkit-overflow-scrolling:touch}
-.topline{display:flex;justify-content:space-between;align-items:center;gap:10px;font:700 12px var(--fc);letter-spacing:.18em;text-transform:uppercase;color:var(--t3)}
+.topline{display:flex;justify-content:space-between;align-items:center;gap:10px;font:700 var(--f-aux) var(--fc);letter-spacing:.18em;text-transform:uppercase;color:var(--t3)}
 .topline span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ring{align-self:center;width:238px;height:238px;flex:none;border:6px solid var(--track);border-top-color:var(--acc);border-right-color:var(--acc);border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:10px}
 .ring.rest{width:218px;height:218px;border-right-color:var(--track);margin-top:16px}
 .clk{font:700 54px var(--fm);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
 .big70{font:700 70px var(--fm);color:var(--acc);font-variant-numeric:tabular-nums}
-.rl{font:700 11px var(--fc);letter-spacing:.2em;text-transform:uppercase;color:var(--t3)}
-.rows{display:flex;flex-direction:column;gap:8px;padding-top:11px;font:400 13px var(--fm)}
+.rl{font:700 var(--f-rot) var(--fc);letter-spacing:.2em;text-transform:uppercase;color:var(--t3)}
+.rows{display:flex;flex-direction:column;gap:8px;padding-top:11px;font:400 var(--f-aux) var(--fm)}
 .row{display:flex;align-items:center;gap:9px}
 .row .n{width:18px;flex:none;color:var(--t3)}
 .bar{height:11px;border-radius:2px;background:var(--acc);flex:none}
@@ -353,7 +441,7 @@ button.split{min-height:48px}
 .bar.pend{background:repeating-linear-gradient(90deg,var(--pend) 0 5px,transparent 5px 8px)}
 .ztag{border-radius:6px;padding:1px 7px;border:1px solid var(--ctl);color:var(--t2)}
 .ztag.miss{border-color:var(--bad-bd);color:var(--bad)}
-.warn{background:var(--bad-bg);border:1px solid var(--bad-bd);color:var(--bad);border-radius:12px;padding:9px 12px;font:600 13.5px var(--fb);text-align:center}
+.warn{background:var(--bad-bg);border:1px solid var(--bad-bd);color:var(--bad);border-radius:12px;padding:9px 12px;font:600 var(--f-base) var(--fb);text-align:center}
 .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:5}
 .flash.go{animation:flashwhite .5s ease-out}
 .flash.go2{animation:flashwhite .5s ease-out 2}
@@ -361,17 +449,17 @@ button.split{min-height:48px}
 
 /* pontuação */
 .shotchips{padding:0 18px 14px;display:flex;flex-wrap:wrap;gap:6px}
-.sc{flex:1 0 30px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:700 13px var(--fm);border:1px solid var(--bd);color:var(--t3)}
+.sc{flex:1 0 30px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:700 var(--f-aux) var(--fm);border:1px solid var(--bd);color:var(--t3)}
 .sc.done{background:var(--acc);border-color:var(--acc);color:#101317}
 .sc.miss{background:var(--bad-bg);border-color:var(--bad-bd);color:var(--bad)}
 .sc.cur{border-color:var(--t1);color:var(--t1)}
 .zones{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 18px 14px;min-height:0}
 .zb{border-radius:16px;border:1px solid var(--ctl);background:var(--surf);color:var(--t1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;min-height:96px}
 .zb:hover,.zb:active{filter:brightness(1.25)}
-.zb b{font:700 38px var(--fm)}
-.zb span{font:700 12px var(--fc);letter-spacing:.14em}
+.zb b{font:700 var(--f-n4) var(--fm)}
+.zb span{font:700 var(--f-aux) var(--fc);letter-spacing:.14em}
 .zb.miss{background:var(--bad-bg);border-color:var(--bad-bd);color:var(--bad)}
-.tally{display:flex;gap:7px;padding-top:10px;font:700 14px var(--fm)}
+.tally{display:flex;gap:7px;padding-top:10px;font:700 var(--f-base) var(--fm)}
 .tally span{flex:1;border-radius:10px;padding:9px 0;text-align:center;border:1px solid var(--bd);color:var(--t3)}
 .tally span.on{background:var(--acc);border-color:var(--acc);color:#101317}
 .tally span.on.miss{background:var(--bad-bg);border-color:var(--bad-bd);color:var(--bad)}
@@ -380,17 +468,17 @@ button.split{min-height:48px}
 .tbl{margin:0 18px 13px;background:var(--surf);border:1px solid var(--bd);border-radius:14px;overflow:hidden;flex:none}
 .tr{display:flex;padding:11px 14px;border-bottom:1px solid var(--track);align-items:baseline}
 .tr:last-child{border-bottom:0}
-.tr>span{flex:1;text-align:right;font:400 13.5px var(--fm)}
-.tr>span:first-child{text-align:left;font:500 14px var(--fb)}
+.tr>span{flex:1;text-align:right;font:400 var(--f-base) var(--fm)}
+.tr>span:first-child{text-align:left;font:500 var(--f-base) var(--fb)}
 .tr.h{padding:10px 14px;background:var(--rec);border-bottom:1px solid var(--bd)}
-.tr.h>span{font:700 9.5px var(--fc);letter-spacing:.14em;text-transform:uppercase;color:var(--t3)}
-.note{margin:0 18px 13px;background:var(--rec);border-left:2px solid var(--acc);border-radius:0 12px 12px 0;padding:12px 14px;font:400 13.5px var(--fb);color:var(--t2);line-height:1.45}
+.tr.h>span{font:700 var(--f-micro) var(--fc);letter-spacing:.14em;text-transform:uppercase;color:var(--t3)}
+.note{margin:0 18px 13px;background:var(--rec);border-left:2px solid var(--acc);border-radius:0 12px 12px 0;padding:12px 14px;font:400 var(--f-base) var(--fb);color:var(--t2);line-height:1.45}
 details.adv{background:var(--surf);border:1px solid var(--bd);border-radius:14px;padding:0}
-details.adv>summary{list-style:none;cursor:pointer;padding:13px;font:700 11px var(--fc);letter-spacing:.18em;text-transform:uppercase;color:var(--t3);display:flex;justify-content:space-between;align-items:center}
+details.adv>summary{list-style:none;cursor:pointer;padding:13px;font:700 var(--f-rot) var(--fc);letter-spacing:.18em;text-transform:uppercase;color:var(--t3);display:flex;justify-content:space-between;align-items:center}
 details.adv>summary::-webkit-details-marker{display:none}
 details.adv[open]>summary{border-bottom:1px solid var(--track)}
 details.adv .inner{padding:13px;display:flex;flex-direction:column;gap:12px}
-.empty{border:1px dashed var(--ctl);border-radius:14px;padding:18px;text-align:center;font:400 14px var(--fb);color:var(--t3)}
+.empty{border:1px dashed var(--ctl);border-radius:14px;padding:18px;text-align:center;font:400 var(--f-base) var(--fb);color:var(--t3)}
 
 /* folhas inferiores (menu, confirmação) */
 .ovl{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:flex-end}
@@ -400,15 +488,15 @@ details.adv .inner{padding:13px;display:flex;flex-direction:column;gap:12px}
 .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .mi{height:78px;background:var(--surf);border:1px solid var(--bd);border-radius:14px;padding:13px;display:flex;flex-direction:column;justify-content:space-between;text-align:left;cursor:pointer}
 .mi.on{border-color:var(--acc)}
-.mi .ic{font-size:18px;color:var(--t3)}
+.mi .ic{font-size:var(--f-n1);color:var(--t3)}
 .mi.on .ic{color:var(--acc)}
-.mi .nm{font:600 16px var(--fb);color:var(--t1)}
-.mi .mt{font:400 12px var(--fb);color:var(--t3)}
+.mi .nm{font:600 var(--f-ttl) var(--fb);color:var(--t1)}
+.mi .mt{font:400 var(--f-aux) var(--fb);color:var(--t3)}
 .mi .mt.late{color:var(--bad)}
-.statusbar{display:flex;align-items:center;gap:7px;padding:0 18px 10px;font:500 12px var(--fb);color:var(--t3)}
+.statusbar{display:flex;align-items:center;gap:7px;padding:0 18px 10px;font:500 var(--f-aux) var(--fb);color:var(--t3)}
 .statusbar i{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none}
 .statusbar i.warn{background:var(--acc)}.statusbar i.off{background:var(--bad)}
-.toast{position:absolute;left:18px;right:18px;bottom:calc(96px + var(--sab));z-index:30;background:var(--t1);color:#101317;border-radius:14px;padding:14px 16px;font:500 14.5px var(--fb);text-align:center;animation:toastin .18s ease-out}
+.toast{position:absolute;left:18px;right:18px;bottom:calc(96px + var(--sab));z-index:30;background:var(--t1);color:#101317;border-radius:14px;padding:14px 16px;font:500 var(--f-base) var(--fb);text-align:center;animation:toastin .18s ease-out}
 @keyframes toastin{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 
 /* =====================================================================
@@ -441,11 +529,11 @@ button.card:active,.card.click:active,.dash:active{transform:scale(.98)}
 @media (max-height:640px){
   .ring{width:150px;height:150px;border-width:5px;margin-top:2px}
   .ring.rest{width:142px;height:142px}
-  .clk{font-size:36px}.big70{font-size:44px}
+  .clk{font-size:var(--f-n4)}.big70{font-size:var(--f-n4)}
   .exec{gap:10px;padding:12px 16px calc(12px + var(--sab))}
-  .hdr{padding:10px 18px 6px}.ttl{padding:4px 18px 8px;font-size:20px}
-  .btn{min-height:50px}.btn.big{min-height:56px}.zb{min-height:64px}.zb b{font-size:28px}
-  .kpi b{font-size:18px}.foot{padding:10px 18px calc(12px + var(--sab))}
+  .hdr{padding:10px 18px 6px}.ttl{padding:4px 18px 8px;font-size:var(--f-n1)}
+  .btn{min-height:50px}.btn.big{min-height:56px}.zb{min-height:64px}.zb b{font-size:var(--f-n3)}
+  .kpi b{font-size:var(--f-n1)}.foot{padding:10px 18px calc(12px + var(--sab))}
 }
 /* v10 C2 — paisagem de celular: com ~390px de altura sobravam só ~170px de
    conteúdo útil (menos de 2 cartões por vez). Como sobra largura, o conteúdo
@@ -456,24 +544,23 @@ button.card:active,.card.click:active,.dash:active{transform:scale(.98)}
   .body>.empty,.body>.note,.body>.tbl,.body>.statusbar,.body>details.adv{grid-column:1/-1}
   .kpis{padding-bottom:8px}
   .zones{grid-template-columns:repeat(4,1fr)}
-  .zb{min-height:56px}.zb b{font-size:26px}
+  .zb{min-height:56px}
 }
 @media (max-height:520px){
   #app{max-width:none}
-  .ttl{font-size:17px;padding:2px 18px 5px}
-  .ttl .sub,.sub{font-size:12px}
+  .ttl{font-size:var(--f-ttl);padding:2px 18px 5px}
+  .ttl .sub,.sub{font-size:var(--f-aux)}
   .foot{padding:8px 18px calc(8px + var(--sab))}
   .chips{padding-bottom:8px}.chip{min-height:34px;padding:0 11px}
   .exec{gap:7px;padding:8px 16px calc(8px + var(--sab))}
   .ring{width:104px;height:104px;border-width:4px;margin-top:0}
   .ring.rest{width:96px;height:96px}
-  .clk{font-size:26px}.big70{font-size:30px}.rl{font-size:9px;letter-spacing:.1em}
+  .clk{font-size:var(--f-n3)}.big70{font-size:var(--f-n3)}.rl{font-size:var(--f-micro);letter-spacing:.1em}
   .exec .card.split{display:none}
-  .exec .topline{font-size:10px}
-  .btn{min-height:42px;font-size:14px}.btn.big{min-height:46px}
+  .exec .topline{font-size:var(--f-micro)}
+  .btn{min-height:42px;font-size:var(--f-base)}.btn.big{min-height:46px}
   .hdr{padding:6px 16px 4px}.hb{width:38px;height:38px}
-  .ttl{font-size:18px;padding:2px 18px 6px}
-  .kpis{padding:0 18px 8px}.kpi{padding:8px 4px}.kpi b{font-size:16px}
+  .kpis{padding:0 18px 8px}.kpi{padding:8px 4px}.kpi b{font-size:var(--f-ttl)}
 }
 </style>
 </head>
@@ -846,19 +933,19 @@ SCREENS.home=()=>{
   if(last&&drillById(last.drillId)){
     const reps=last.blockSize||1,b=bestHfFor(last.drillId);
     resume='<button class="card click" data-a="resume" style="margin:0 18px 16px;width:auto;border:1.5px solid var(--acc);border-radius:16px;padding:16px"><div class="lbl" style="color:var(--acc)">Retomar</div>'
-      +'<div class="split" style="padding-top:6px"><div style="min-width:0"><div style="font:600 20px var(--fb)">'+esc(last.drillName)+'</div><div class="sub" style="font-size:14px">'+esc(last.cal||"")+' · '+fnum(last.dist)+' m · '+plural(reps,"rep","reps")+'</div></div>'
-      +'<div style="text-align:right;flex:none"><div class="mono" style="font-weight:700;font-size:21px;color:var(--acc)">'+(b>0?fmt(b,2):dash)+'</div><div class="lbl" style="font-size:10px;letter-spacing:.14em">Melhor HF</div></div></div></button>';
+      +'<div class="split" style="padding-top:6px"><div style="min-width:0"><div style="font:600 var(--f-n1) var(--fb)">'+esc(last.drillName)+'</div><div class="sub" style="font-size:var(--f-base)">'+esc(last.cal||"")+' · '+fnum(last.dist)+' m · '+plural(reps,"rep","reps")+'</div></div>'
+      +'<div style="text-align:right;flex:none"><div class="mono" style="font-weight:700;font-size:var(--f-n1);color:var(--acc)">'+(b>0?fmt(b,2):dash)+'</div><div class="lbl" style="font-size:var(--f-micro);letter-spacing:.14em">Melhor HF</div></div></div></button>';
   }else{
-    resume='<button class="card click" data-a="flow" style="margin:0 18px 16px;width:auto;border:1.5px solid var(--acc);border-radius:16px;padding:16px"><div class="lbl" style="color:var(--acc)">Primeiro treino</div><div style="font:600 20px var(--fb);padding-top:6px">Escolha um drill</div><div class="sub" style="font-size:14px">leva menos de um minuto para começar</div></button>';
+    resume='<button class="card click" data-a="flow" style="margin:0 18px 16px;width:auto;border:1.5px solid var(--acc);border-radius:16px;padding:16px"><div class="lbl" style="color:var(--acc)">Primeiro treino</div><div style="font:600 var(--f-n1) var(--fb);padding-top:6px">Escolha um drill</div><div class="sub" style="font-size:var(--f-base)">leva menos de um minuto para começar</div></button>';
   }
   /* sugestões: só o que é real (desafio mais recente, backup) */
   let sug="";const ch=DB.challenges[DB.challenges.length-1];
-  if(ch)sug+='<button class="card click" data-a="go" data-v="challenges" style="border-radius:16px;padding:15px"><div class="nm">'+esc(ch.name)+'</div><div class="sub" style="font-size:14px">desafio '+(ch.online?"online":"local")+' · '+esc(ch.drillName||(drillById(ch.drillId)||{}).name||"")+'</div></button>';
+  if(ch)sug+='<button class="card click" data-a="go" data-v="challenges" style="border-radius:16px;padding:15px"><div class="nm">'+esc(ch.name)+'</div><div class="sub" style="font-size:var(--f-base)">desafio '+(ch.online?"online":"local")+' · '+esc(ch.drillName||(drillById(ch.drillId)||{}).name||"")+'</div></button>';
   if(n){const late=backupLate(),d=daysSinceExport();
-    sug+='<button class="card click split" data-a="backup" style="border-radius:16px;padding:15px"><div><div class="nm">Backup</div><div class="sub" style="font-size:14px;color:'+(late?"var(--bad)":"var(--ok)")+'">'+(d===null?"nenhum backup feito ainda":d===0?"backup feito hoje":late?d+" dias sem exportar":"último há "+plural(d,"dia","dias"))+'</div></div><span style="font:500 14px var(--fb);color:var(--acc)">Exportar</span></button>';}
+    sug+='<button class="card click split" data-a="backup" style="border-radius:16px;padding:15px"><div><div class="nm">Backup</div><div class="sub" style="font-size:var(--f-base);color:'+(late?"var(--bad)":"var(--ok)")+'">'+(d===null?"nenhum backup feito ainda":d===0?"backup feito hoje":late?d+" dias sem exportar":"último há "+plural(d,"dia","dias"))+'</div></div><span style="font:500 var(--f-base) var(--fb);color:var(--acc)">Exportar</span></button>';}
   return '<div class="scr">'+hdr(B.menu,"CADÊNCIA",'<button class="hb me" data-a="go" data-v="profile" aria-label="Perfil">'+initials()+'</button>',"home")
     +statusBar()
-    +'<div style="padding:0 18px 16px"><div style="font:600 27px var(--fb);line-height:1.1">'+greet+(nm?", "+esc(nm):"")+'</div><div class="sub" style="font-size:14px">'+line+'</div></div>'
+    +'<div style="padding:0 18px 16px"><div style="font:600 var(--f-n3) var(--fb);line-height:1.1">'+greet+(nm?", "+esc(nm):"")+'</div><div class="sub" style="font-size:var(--f-base)">'+line+'</div></div>'
     +resume
     +(sug?'<div class="lbl" style="padding:0 18px 9px">Sugerido para hoje</div><div class="body" style="gap:11px">'+sug+'</div>':'<div style="flex:1"></div>')
     +'<div class="foot" style="padding-top:16px"><button class="btn p big cta" data-a="flow">'+ic("mira",23)+'INICIAR TREINO</button></div></div>';
@@ -870,9 +957,9 @@ SCREENS.step1=()=>{
   if(!selDrill())S.selId=(DB.drills[0]||{}).id;
   const cards=list.map(d=>{const on=d.id===S.selId;
     return '<button class="card'+(on?" sel":"")+'" data-a="pick" data-v="'+esc(d.id)+'" aria-pressed="'+on+'" style="padding:14px"><div style="display:flex;align-items:center;gap:12px">'
-      +'<span style="width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;border:1.5px solid '+(on?"var(--acc)":"var(--hov)")+';background:'+(on?"var(--acc)":"none")+';color:#101317;font:700 12px var(--fb)">'+(on?"✓":"")+'</span>'
-      +'<span style="flex:1;min-width:0"><span class="nm" style="display:block">'+esc(d.name)+'</span><span class="sub" style="font-size:13px;display:block">'+drillMeta(d)+'</span></span></div>'
-      +(on&&(d.desc||d.target)?'<div style="border-top:1px solid var(--bd);margin-top:12px;padding-top:11px"><div class="lbl" style="font-size:10px">Como executar</div><div style="font:400 13.5px var(--fb);color:var(--t2);padding-top:5px;line-height:1.45">'+esc(d.desc||"")+(d.target?'<br><span style="color:var(--t3)">Alvo recomendado: '+esc(d.target)+'</span>':'')+'</div></div>':'')
+      +'<span style="width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;border:1.5px solid '+(on?"var(--acc)":"var(--hov)")+';background:'+(on?"var(--acc)":"none")+';color:#101317;font:700 var(--f-aux) var(--fb)">'+(on?"✓":"")+'</span>'
+      +'<span style="flex:1;min-width:0"><span class="nm" style="display:block">'+esc(d.name)+'</span><span class="sub" style="font-size:var(--f-aux);display:block">'+drillMeta(d)+'</span></span></div>'
+      +(on&&(d.desc||d.target)?'<div style="border-top:1px solid var(--bd);margin-top:12px;padding-top:11px"><div class="lbl" style="font-size:var(--f-micro)">Como executar</div><div style="font:400 var(--f-base) var(--fb);color:var(--t2);padding-top:5px;line-height:1.45">'+esc(d.desc||"")+(d.target?'<br><span style="color:var(--t3)">Alvo recomendado: '+esc(d.target)+'</span>':'')+'</div></div>':'')
       +'</button>';}).join("");
   const sel=selDrill();
   return '<div class="scr">'+hdr(B.menu,"Passo 1 de 3",B.home)+prog(1)+'<div class="ttl">O que vai treinar?</div>'
@@ -888,20 +975,20 @@ SCREENS.step2=()=>{
   return '<div class="scr">'+hdr(B.menu,"Passo 2 de 3",B.home)+prog(2)
     +'<div class="ttl">Material e distância<div class="sub">'+esc(d.name)+' · '+(d.shots>0?plural(d.shots,"tiro","tiros"):"tiros livres")+'</div></div>'
     +'<div class="body">'
-    +'<div class="card"><div class="split" style="align-items:baseline"><div class="lbl">Tipo de arma</div><div class="sub" style="font-size:12px">'+plural(cals.length,"calibre","calibres")+'</div></div>'
+    +'<div class="card"><div class="split" style="align-items:baseline"><div class="lbl">Tipo de arma</div><div class="sub" style="font-size:var(--f-aux)">'+plural(cals.length,"calibre","calibres")+'</div></div>'
       +'<div class="g3">'+GUNS.map(g=>'<button class="opt'+(s.gun===g?" on":"")+'" data-a="gun" data-v="'+g+'" aria-pressed="'+(s.gun===g)+'">'+g+'</button>').join("")+'</div></div>'
     +'<div class="card"><div class="lbl">Calibre · '+esc(s.gun)+'</div><div class="g3">'
       +cals.map(c=>'<button class="opt m'+(s.cal===c?" on":"")+'" data-a="cal" data-v="'+esc(c)+'" aria-pressed="'+(s.cal===c)+'">'+esc(c)+'</button>').join("")
       +'<button class="opt add" data-a="addCalOpen">+ outro</button></div>'
-      +(S.showAddCal?'<div style="display:flex;gap:8px;padding-top:10px"><input class="inp" id="addCal" placeholder="ex: .357 SIG" aria-label="Novo calibre" maxlength="16"><button class="btn p none" data-a="addCalSave" style="min-height:44px;border-radius:10px;font-size:14px">Salvar</button></div><div class="sub" style="font-size:12px;padding-top:6px">Fica salvo na sua lista de '+esc(s.gun)+'.</div>':'')
+      +(S.showAddCal?'<div style="display:flex;gap:8px;padding-top:10px"><input class="inp" id="addCal" placeholder="ex: .357 SIG" aria-label="Novo calibre" maxlength="16"><button class="btn p none" data-a="addCalSave" style="min-height:44px;border-radius:10px;font-size:var(--f-base)">Salvar</button></div><div class="sub" style="font-size:var(--f-aux);padding-top:6px">Fica salvo na sua lista de '+esc(s.gun)+'.</div>':'')
     +'</div>'
     +'<div style="display:flex;gap:11px"><div class="card" style="flex:1"><div class="lbl">Distância (m)</div>'+stepper("dist",fnum(S.dist),"distância")+'</div>'
       +'<div class="card" style="flex:1"><div class="lbl">Repetições</div>'+stepper("reps",S.reps,"repetições")+'</div></div>'
-    +(S.reps>1?'<div class="card split"><div><div class="lbl">Descanso entre reps</div><div class="sub" style="font-size:12.5px">'+(S.rest>0?"a próxima rep começa sozinha":"as reps emendam direto")+'</div></div><div style="display:flex;align-items:center;gap:10px"><button class="sb" data-a="rest" data-v="-1" aria-label="Diminuir descanso">−</button><div class="num" style="font-size:19px;width:62px">'+(S.rest>0?S.rest+" s":"nenhum")+'</div><button class="sb" data-a="rest" data-v="1" aria-label="Aumentar descanso">+</button></div></div>':'')
-    +'<button class="card split" data-a="micToggle" role="switch" aria-checked="'+mic+'"><div><div style="font:500 15px var(--fb)">Detecção por microfone</div><div class="sub" style="font-size:13px">'+(mic?"margem "+Math.round(marginDb(s.sens))+" dB · pronto":"dry-fire · sem detecção")+'</div></div><span class="tg'+(mic?" on":"")+'"><i></i></span></button>'
+    +(S.reps>1?'<div class="card split"><div><div class="lbl">Descanso entre reps</div><div class="sub" style="font-size:var(--f-aux)">'+(S.rest>0?"a próxima rep começa sozinha":"as reps emendam direto")+'</div></div><div style="display:flex;align-items:center;gap:10px"><button class="sb" data-a="rest" data-v="-1" aria-label="Diminuir descanso">−</button><div class="num" style="font-size:var(--f-n1);width:62px">'+(S.rest>0?S.rest+" s":"nenhum")+'</div><button class="sb" data-a="rest" data-v="1" aria-label="Aumentar descanso">+</button></div></div>':'')
+    +'<button class="card split" data-a="micToggle" role="switch" aria-checked="'+mic+'"><div><div style="font:500 var(--f-forte) var(--fb)">Detecção por microfone</div><div class="sub" style="font-size:var(--f-aux)">'+(mic?"margem "+Math.round(marginDb(s.sens))+" dB · pronto":"dry-fire · sem detecção")+'</div></div><span class="tg'+(mic?" on":"")+'"><i></i></span></button>'
     +'<button class="link" data-a="go" data-v="mic">Ajustar captação do microfone</button>'
     +'</div>'
-    +'<div class="foot"><button class="btn sq" data-a="go" data-v="step1" aria-label="Voltar ao passo 1">'+ic("voltar",20)+'</button><button class="btn p" data-a="start" style="min-height:60px;font-size:18px">Ir para o timer</button></div></div>';
+    +'<div class="foot"><button class="btn sq" data-a="go" data-v="step1" aria-label="Voltar ao passo 1">'+ic("voltar",20)+'</button><button class="btn p" data-a="start" style="min-height:60px;font-size:var(--f-n1)">Ir para o timer</button></div></div>';
 };
 function micOn(){return DB.settings.mic!==false&&!DB.settings.dry;}
 
@@ -913,7 +1000,7 @@ SCREENS.timer=()=>{
     +'<div class="warn" id="mwarn" style="display:none" role="alert"></div>'
     +'<div class="ring" role="timer"><div class="clk" id="clk">0,00</div><div class="rl">'+parLine(d)+'</div></div>'
     +'<div class="card" style="background:var(--rec);flex:1;min-height:0;overflow:auto"><div class="lbl">Splits ao vivo</div><div class="rows" id="spl"></div></div>'
-    +'<button class="btn" id="stopBtn" data-a="stopT" style="flex:none;min-height:64px;border:1.5px solid var(--pend);color:var(--t1);font:600 18px var(--fb)">Cancelar</button></div>';
+    +'<button class="btn" id="stopBtn" data-a="stopT" style="flex:none;min-height:64px;border:1.5px solid var(--pend);color:var(--t1);font:600 var(--f-n1) var(--fb)">Cancelar</button></div>';
 };
 
 /* 5. DESCANSO — contagem regressiva; a próxima rep começa sozinha */
@@ -922,18 +1009,18 @@ SCREENS.rest=()=>{
   return '<div class="scr exec" style="gap:16px;align-items:center;text-align:center">'
     +'<div class="topline" style="align-self:stretch"><span>Bloco · rep '+T.runs.length+' de '+T.reps+'</span><span>descanso</span></div>'
     +'<div class="ring rest"><div class="big70" id="restLeft">'+T.restLeft+'</div><div class="rl">Segundos</div></div>'
-    +'<div style="font:500 17px var(--fb);padding-top:6px">A rep '+T.rep+' começa sozinha</div>'
-    +'<div class="card split" style="background:var(--rec)"><div style="text-align:left"><div class="lbl" style="font-size:10.5px">Rep anterior</div><div style="font:400 13.5px var(--fb);color:var(--t2)">rep '+r.rep+' · '+fmt(r.total,2)+' s'+(r.shots.length?' · 1º tiro '+fmt(r.shots[0],2)+' s':'')+'</div></div><div class="mono" style="font-weight:700;font-size:20px;color:var(--acc)">'+plural(r.shots.length,"tiro","tiros")+'</div></div>'
-    +'<div style="align-self:stretch;display:flex;gap:11px;margin-top:auto"><button class="btn" data-a="restAdd">+10 s</button><button class="btn p" data-a="restSkip" style="font-size:16px">Começar já</button></div>'
+    +'<div style="font:500 var(--f-ttl) var(--fb);padding-top:6px">A rep '+T.rep+' começa sozinha</div>'
+    +'<div class="card split" style="background:var(--rec)"><div style="text-align:left"><div class="lbl" style="font-size:var(--f-micro)">Rep anterior</div><div style="font:400 var(--f-base) var(--fb);color:var(--t2)">rep '+r.rep+' · '+fmt(r.total,2)+' s'+(r.shots.length?' · 1º tiro '+fmt(r.shots[0],2)+' s':'')+'</div></div><div class="mono" style="font-weight:700;font-size:var(--f-n1);color:var(--acc)">'+plural(r.shots.length,"tiro","tiros")+'</div></div>'
+    +'<div style="align-self:stretch;display:flex;gap:11px;margin-top:auto"><button class="btn" data-a="restAdd">+10 s</button><button class="btn p" data-a="restSkip" style="font-size:var(--f-ttl)">Começar já</button></div>'
     +'<button class="btn" data-a="restStop" style="align-self:stretch;flex:none;width:100%;min-height:54px">Encerrar bloco agora</button></div>';
 };
 
 /* 6. SEM TIRO — o cronômetro rodou mas o microfone não ouviu nada */
 SCREENS.noshot=()=>'<div class="scr exec"><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center">'
-  +'<div style="width:74px;height:74px;border-radius:50%;border:2px solid var(--bad-bd);display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--bad)">!</div>'
-  +'<div style="font:600 23px var(--fb)">Nenhum tiro detectado</div>'
-  +'<div style="font:400 14.5px var(--fb);color:var(--t2);line-height:1.5;max-width:290px">O cronômetro rodou, mas o microfone não ouviu disparos. Normalmente é protetor auricular sobre o celular, margem muito alta ou o aparelho longe da linha.</div>'
-  +'<div class="card" style="background:var(--rec)"><div class="lbl" style="font-size:10.5px">O que tentar</div><div style="font:400 13.5px var(--fb);color:var(--t2);padding-top:5px;line-height:1.5">Margem atual '+Math.round(marginDb(DB.settings.sens))+' dB — baixe um pouco. Deixe o celular a até 2 m da baia, com o microfone livre.</div></div></div>'
+  +'<div style="width:74px;height:74px;border-radius:50%;border:2px solid var(--bad-bd);display:flex;align-items:center;justify-content:center;font-size:var(--f-n3);color:var(--bad)">!</div>'
+  +'<div style="font:600 var(--f-n2) var(--fb)">Nenhum tiro detectado</div>'
+  +'<div style="font:400 var(--f-base) var(--fb);color:var(--t2);line-height:1.5;max-width:290px">O cronômetro rodou, mas o microfone não ouviu disparos. Normalmente é protetor auricular sobre o celular, margem muito alta ou o aparelho longe da linha.</div>'
+  +'<div class="card" style="background:var(--rec)"><div class="lbl" style="font-size:var(--f-micro)">O que tentar</div><div style="font:400 var(--f-base) var(--fb);color:var(--t2);padding-top:5px;line-height:1.5">Margem atual '+Math.round(marginDb(DB.settings.sens))+' dB — baixe um pouco. Deixe o celular a até 2 m da baia, com o microfone livre.</div></div></div>'
   +'<div style="display:flex;flex-direction:column;gap:11px;padding-top:16px"><button class="btn p" data-a="retry" style="flex:none;min-height:60px">Tentar de novo</button>'
   +'<div style="display:flex;gap:11px"><button class="btn" data-a="go" data-v="mic" style="min-height:54px">Ajustar mic</button><button class="btn" data-a="backToPrep" style="min-height:54px">Voltar ao preparo</button></div></div></div>';
 
@@ -943,7 +1030,7 @@ SCREENS.score=()=>{
   const chips=r.shots.map((_,j)=>{if(j<k){const z=T.zones[j];return '<span class="sc '+(z==="M"?"miss":"done")+'">'+z+'</span>';}return '<span class="sc'+(j===k?" cur":"")+'">'+(j===k?j+1:"")+'</span>';}).join("");
   const zb=(z,pts,cls)=>'<button class="zb'+(cls?" "+cls:"")+'" data-a="zone" data-v="'+z+'" aria-label="Zona '+(z==="M"?"miss":z)+'"><b>'+(z==="M"?"MISS":z)+'</b><span>'+pts+'</span></button>';
   return '<div class="scr">'+hdr(B.menu,multi?"Pontuar · rep "+r.rep+" de "+T.runs.length:"Pontuar · "+esc(T.drill.name),B.close("discard"))
-    +'<div style="padding:0 18px 4px;font:600 24px var(--fb)">Tiro '+Math.min(k+1,r.shots.length)+' de '+r.shots.length+'</div>'
+    +'<div style="padding:0 18px 4px;font:600 var(--f-n2) var(--fb)">Tiro '+Math.min(k+1,r.shots.length)+' de '+r.shots.length+'</div>'
     +'<div class="sub" style="padding:0 18px 12px">rep '+r.rep+' · '+fmt(r.total,2)+' s no total</div>'
     +'<div class="shotchips">'+chips+'</div>'
     +'<div class="zones">'+zb("A","+5 PTS")+zb("C","+3 PTS")+zb("D","+1 PT")+zb("M","−10 PTS","miss")+'</div>'
@@ -956,7 +1043,7 @@ SCREENS.result=()=>{
   const record=c.scored&&c.hf>0&&c.hf>=best;
   const tally=c.scored?'<div class="tally">'+[["A",c.a],["C",c.c],["D",c.d],["M",c.m]].map(([z,n])=>'<span class="'+(n?"on":"")+(z==="M"?" miss":"")+'">'+z+' ×'+n+'</span>').join("")+'</div>':'<div class="sub" style="padding-top:8px">Sem pontuação — só os tempos foram guardados.</div>';
   return '<div class="scr">'+hdr(B.menu,"Resultado · "+esc(T.drill.name),B.home)
-    +'<div style="padding:0 18px 12px;font:600 24px var(--fb)">'+(record?"Melhor marca até agora":"Sessão registrada")+'</div>'
+    +'<div style="padding:0 18px 12px;font:600 var(--f-n2) var(--fb)">'+(record?"Melhor marca até agora":"Sessão registrada")+'</div>'
     +avisoContagem(r.shots.length,T.drill.shots,"margin:0 18px 13px")
     +'<div class="kpis">'+kpi(fmt(c.total,2),"Total")+kpi(c.first!=null?fmt(c.first,2):dash,"1º tiro")+kpi(c.scored?fmt(c.hf,2):dash,"Hit factor",true)+'</div>'
     +'<div class="body" style="padding:0;gap:0">'
@@ -995,8 +1082,8 @@ SCREENS.block=()=>{
 /* áreas que chegam nas fases 2 e 3 (os dados já são os mesmos da versão atual) */
 const SOON={}; /* fases 2 e 3 implementadas: sem placeholders */
 Object.keys(SOON).forEach(k=>{SCREENS[k]=()=>'<div class="scr">'+hdr(B.menu,SOON[k],B.home)
-  +'<div class="body"><div class="card" style="padding:16px"><div class="lbl">Próxima fase</div><div style="font:600 19px var(--fb);padding:6px 0 6px">'+SOON[k]+' ainda está na versão atual</div>'
-  +'<div class="sub" style="font-size:14px;color:var(--t2)">Esta área ganha o novo visual na próxima fase do redesign. Os dados são os mesmos: o que você fizer na versão atual aparece aqui, e vice-versa'+(k==="mic"?" — inclusive a margem e a janela anti-eco da calibração":"")+'.</div></div></div>'
+  +'<div class="body"><div class="card" style="padding:16px"><div class="lbl">Próxima fase</div><div style="font:600 var(--f-n1) var(--fb);padding:6px 0 6px">'+SOON[k]+' ainda está na versão atual</div>'
+  +'<div class="sub" style="font-size:var(--f-base);color:var(--t2)">Esta área ganha o novo visual na próxima fase do redesign. Os dados são os mesmos: o que você fizer na versão atual aparece aqui, e vice-versa'+(k==="mic"?" — inclusive a margem e a janela anti-eco da calibração":"")+'.</div></div></div>'
   +'<div class="foot"><a class="btn p" href="cadencia.html">Abrir a versão atual</a></div></div>';});
 
 /* ---------- linhas "tiro a tiro" ---------- */
@@ -1029,11 +1116,11 @@ function menuSheet(){
   return '<div class="ovl" role="dialog" aria-modal="true" aria-label="Menu"><button class="scrim" data-a="menuClose" aria-label="Fechar menu"></button><div class="sheet"><div class="grab"></div>'
     +'<div class="split"><div class="lbl">Ir para</div><button class="hb" data-a="menuClose" style="width:44px;height:44px;border-radius:12px" aria-label="Fechar menu">'+ic("fechar",18)+'</button></div>'
     +'<div class="mgrid">'+items.map(([k,ic0,l,m])=>'<button class="mi'+(S.screen===k?" on":"")+'" data-a="go" data-v="'+k+'"><span class="ic">'+ic(ic0,20)+'</span><span><span class="nm" style="display:block">'+l+'</span><span class="mt'+(k==="settings"&&late?" late":"")+'" style="display:block">'+esc(m)+'</span></span></button>').join("")+'</div>'
-    +'<button class="btn p cta" data-a="flow" style="min-height:58px;border-radius:16px;font-size:15px;letter-spacing:.16em;flex:none">'+ic("mira",20)+'INICIAR TREINO</button></div></div>';
+    +'<button class="btn p cta" data-a="flow" style="min-height:58px;border-radius:16px;font-size:var(--f-forte);letter-spacing:.16em;flex:none">'+ic("mira",20)+'INICIAR TREINO</button></div></div>';
 }
 function askSheet(){const a=S.ask;
   return '<div class="ovl" role="alertdialog" aria-modal="true" aria-label="'+esc(a.title)+'"><button class="scrim" data-a="askNo" aria-label="Cancelar"></button><div class="sheet">'
-    +'<div style="font:600 20px var(--fb)">'+esc(a.title)+'</div><div style="font:400 14px var(--fb);color:var(--t2);line-height:1.45">'+esc(a.body)+'</div>'
+    +'<div style="font:600 var(--f-n1) var(--fb)">'+esc(a.title)+'</div><div style="font:400 var(--f-base) var(--fb);color:var(--t2);line-height:1.45">'+esc(a.body)+'</div>'
     +'<button class="btn '+(a.danger?"bad":"p")+'" data-a="askYes" style="flex:none;min-height:56px;border-radius:14px">'+esc(a.ok)+'</button>'
     +'<button class="btn" data-a="askNo" style="flex:none;min-height:52px;border-radius:14px">Cancelar</button></div></div>';}
 /* confirmação em folha inferior (substitui confirm() — não quebra o visual nem trava em WebView) */
@@ -1433,21 +1520,21 @@ SCREENS.progress=()=>{
   const drillChip=S.pdrill?'<div style="padding:0 18px 12px"><button class="chip on" data-a="pdrillOff" style="max-width:100%"><span style="display:inline-flex;align-items:center;gap:8px">'
     +esc(S.pdrill)+ic("fechar",13)+'</span></button></div>':'';
   let content;
-  if(!anyMine)content='<div class="empty" style="margin:0 18px"><div style="font:600 18px var(--fb);color:var(--t1);padding-bottom:6px">Nenhum treino ainda</div>Cada série salva aparece aqui com hit factor, tempos e zonas.</div><div style="padding:12px 18px"><button class="btn p" data-a="flow" style="width:100%">Fazer o primeiro treino</button></div>';
-  else if(!arr.length)content='<div class="empty" style="margin:0 18px"><div style="font:600 18px var(--fb);color:var(--t1);padding-bottom:6px">Nada neste filtro</div>Nenhuma sessão de '+catLabel(S.pcat).toLowerCase()+' em '+(S.period==="all"?"todo o histórico":"últimos "+S.period+" dias")+'.</div><div style="padding:12px 18px"><button class="btn" data-a="progReset" style="width:100%">Ver tudo</button></div>';
+  if(!anyMine)content='<div class="empty" style="margin:0 18px"><div style="font:600 var(--f-n1) var(--fb);color:var(--t1);padding-bottom:6px">Nenhum treino ainda</div>Cada série salva aparece aqui com hit factor, tempos e zonas.</div><div style="padding:12px 18px"><button class="btn p" data-a="flow" style="width:100%">Fazer o primeiro treino</button></div>';
+  else if(!arr.length)content='<div class="empty" style="margin:0 18px"><div style="font:600 var(--f-n1) var(--fb);color:var(--t1);padding-bottom:6px">Nada neste filtro</div>Nenhuma sessão de '+catLabel(S.pcat).toLowerCase()+' em '+(S.period==="all"?"todo o histórico":"últimos "+S.period+" dias")+'.</div><div style="padding:12px 18px"><button class="btn" data-a="progReset" style="width:100%">Ver tudo</button></div>';
   else{
     const h=heroFor(arr),hfBars=arr.filter(isScored).slice(-24),mx=Math.max(0.01,...hfBars.map(s=>s.hf));
     const good=h.delta==null?null:(h.lowerBetter?h.delta<=0:h.delta>=0);
     const hero='<div class="card" style="margin:0 18px 12px;width:auto;padding:15px;flex:none"><div class="lbl" style="color:var(--acc)">'+esc(S.report)+' · '+h.label+'</div>'
-      +'<div class="split" style="align-items:flex-end;padding-top:6px"><div style="font:700 40px var(--fm);line-height:1.05;color:var(--acc)">'+(h.v!=null?fmt(h.v,h.dec)+h.unit:dash)+'</div>'
-      +'<div style="text-align:right">'+(h.delta!=null?'<div class="mono" style="font-weight:700;font-size:15px;color:'+(good?"var(--ok)":"var(--bad)")+'">'+(h.delta>=0?"▲ +":"▼ ")+fmt(h.delta,h.dec)+h.unit+'</div>':'')+'<div class="sub" style="font-size:12px">'+plural(arr.length,"sessão","sessões")+' · '+(S.period==="all"?"tudo":S.period+" d")+'</div></div></div>'
+      +'<div class="split" style="align-items:flex-end;padding-top:6px"><div style="font:700 var(--f-n4) var(--fm);line-height:1.05;color:var(--acc)">'+(h.v!=null?fmt(h.v,h.dec)+h.unit:dash)+'</div>'
+      +'<div style="text-align:right">'+(h.delta!=null?'<div class="mono" style="font-weight:700;font-size:var(--f-forte);color:'+(good?"var(--ok)":"var(--bad)")+'">'+(h.delta>=0?"▲ +":"▼ ")+fmt(h.delta,h.dec)+h.unit+'</div>':'')+'<div class="sub" style="font-size:var(--f-aux)">'+plural(arr.length,"sessão","sessões")+' · '+(S.period==="all"?"tudo":S.period+" d")+'</div></div></div>'
       +(hfBars.length?'<div class="hfbars" style="display:flex;align-items:flex-end;gap:3px;height:58px;padding-top:12px">'+hfBars.map((s,i)=>'<button class="hfb" data-a="detail" data-v="'+esc(s.id)+'" aria-label="'+esc(dshort(s.date)+' '+s.drillName+', hit factor '+fmt(s.hf,2))+'" title="'+esc(dshort(s.date)+' · HF '+fmt(s.hf,2))+'"><i style="height:'+Math.max(6,s.hf/mx*100)+'%;background:'+(i===hfBars.length-1?"var(--acc)":"var(--bar)")+'"></i></button>').join("")+'</div>':'')+'</div>';
     const sel='<div style="display:flex;gap:10px;padding:0 18px 12px;flex:none">'
-      +'<button class="card click" data-a="sheet" data-v="cat" style="flex:1;padding:10px 13px"><div class="lbl" style="font-size:10px">Categoria</div><div class="split"><span style="font:600 15px var(--fb)">'+catLabel(S.pcat)+'</span><span style="color:var(--t3)">▾</span></div></button>'
-      +'<button class="card click" data-a="sheet" data-v="rep" style="flex:1;padding:10px 13px"><div class="lbl" style="font-size:10px">Relatório</div><div class="split"><span style="font:600 15px var(--fb)">'+esc(S.report)+'</span><span style="color:var(--t3)">▾</span></div></button></div>';
+      +'<button class="card click" data-a="sheet" data-v="cat" style="flex:1;padding:10px 13px"><div class="lbl" style="font-size:var(--f-micro)">Categoria</div><div class="split"><span style="font:600 var(--f-forte) var(--fb)">'+catLabel(S.pcat)+'</span><span style="color:var(--t3)">▾</span></div></button>'
+      +'<button class="card click" data-a="sheet" data-v="rep" style="flex:1;padding:10px 13px"><div class="lbl" style="font-size:var(--f-micro)">Relatório</div><div class="split"><span style="font:600 var(--f-forte) var(--fb)">'+esc(S.report)+'</span><span style="color:var(--t3)">▾</span></div></button></div>';
     let body;
     if(S.report==="Resumo"){const rows=arr.slice().reverse().slice(0,S.histMax);
-      body='<div style="display:flex;flex-direction:column;gap:9px;padding:0 18px 12px">'+rows.map(s=>'<button class="card click split" data-a="detail" data-v="'+esc(s.id)+'" style="padding:12px 14px"><div style="min-width:0"><div style="font:600 15.5px var(--fb)">'+esc(s.drillName)+(s.blockSize>1?' <span class="sub" style="font-size:12px">rep '+s.repIndex+'/'+s.blockSize+'</span>':'')+(s.expShots>0&&s.nShots!==s.expShots?' <span style="color:var(--acc)">&#9888;</span>':'')+'</div><div class="sub" style="font-size:12.5px">'+dshort(s.date)+' · '+fnum(s.dist)+' m · '+esc(s.cal||"")+(s.scored===false?' · não pontuado':'')+'</div></div><div class="mono" style="font-weight:700;font-size:17px;color:'+(isScored(s)?"var(--acc)":"var(--t3)")+'">'+(isScored(s)?fmt(s.hf,2):dash)+'</div></button>').join("")
+      body='<div style="display:flex;flex-direction:column;gap:9px;padding:0 18px 12px">'+rows.map(s=>'<button class="card click split" data-a="detail" data-v="'+esc(s.id)+'" style="padding:12px 14px"><div style="min-width:0"><div style="font:600 var(--f-forte) var(--fb)">'+esc(s.drillName)+(s.blockSize>1?' <span class="sub" style="font-size:var(--f-aux)">rep '+s.repIndex+'/'+s.blockSize+'</span>':'')+(s.expShots>0&&s.nShots!==s.expShots?' <span style="color:var(--acc)">&#9888;</span>':'')+'</div><div class="sub" style="font-size:var(--f-aux)">'+dshort(s.date)+' · '+fnum(s.dist)+' m · '+esc(s.cal||"")+(s.scored===false?' · não pontuado':'')+'</div></div><div class="mono" style="font-weight:700;font-size:var(--f-ttl);color:'+(isScored(s)?"var(--acc)":"var(--t3)")+'">'+(isScored(s)?fmt(s.hf,2):dash)+'</div></button>').join("")
         +(arr.length>S.histMax?'<button class="dash" data-a="more">Mostrar mais ('+(arr.length-S.histMax)+')</button>':'')+'</div>';}
     else{const R=buildReport(arr);
       body='<div class="kpis">'+R.kpis.map(([v,l,signed,int,suf])=>kpi(v==null?dash:(int?String(Math.round(v)):(signed&&v>0?"+":"")+fmt(v,suf==="%"?0:2)+(suf||"")),l,false,signed&&v!=null?(v>=0?"var(--ok)":"var(--bad)"):"")).join("")+'</div>'
@@ -1461,7 +1548,7 @@ SCREENS.progress=()=>{
 /* folha de escolha (categoria ou relatório), com uma linha de explicação e ✓ na atual */
 function pickSheet(){const isCat=S.sheet==="cat";const opts=isCat?CATS.map(c=>[c.k,c.l,"relatórios: "+REPORTS[c.k].join(", ")]):(REPORTS[S.pcat]||REPORTS.all).map(r=>[r,r,REPORT_HINT[r]]);const cur=isCat?S.pcat:S.report;
   return '<div class="ovl" role="dialog" aria-modal="true" aria-label="'+(isCat?"Categoria":"Relatório")+'"><button class="scrim" data-a="sheetClose" aria-label="Fechar"></button><div class="sheet"><div class="grab"></div><div class="lbl">'+(isCat?"Categoria":"Relatório")+'</div>'
-    +opts.map(([k,l,hint])=>'<button class="card click split" data-a="'+(isCat?"pcat":"report")+'" data-v="'+esc(k)+'" style="padding:12px 14px'+(k===cur?";border-color:var(--acc)":"")+'"><div><div style="font:600 16px var(--fb)">'+esc(l)+'</div><div class="sub" style="font-size:12.5px">'+esc(hint)+'</div></div><span style="color:var(--acc);font-weight:700">'+(k===cur?"✓":"")+'</span></button>').join("")+'</div></div>';}
+    +opts.map(([k,l,hint])=>'<button class="card click split" data-a="'+(isCat?"pcat":"report")+'" data-v="'+esc(k)+'" style="padding:12px 14px'+(k===cur?";border-color:var(--acc)":"")+'"><div><div style="font:600 var(--f-ttl) var(--fb)">'+esc(l)+'</div><div class="sub" style="font-size:var(--f-aux)">'+esc(hint)+'</div></div><span style="color:var(--acc);font-weight:700">'+(k===cur?"✓":"")+'</span></button>').join("")+'</div></div>';}
 
 Object.assign(ACT,{
   period:v=>{S.period=v;S.histMax=40;render();},
@@ -1493,8 +1580,8 @@ SCREENS.detail=()=>{const s=curSess();if(!s){S.screen="progress";return SCREENS.
   const ch=s.challengeId?DB.challenges.find(c=>c.id===s.challengeId):null;
   let shotsBox;
   if(S.detEdit){shotsBox='<div class="rows" style="gap:6px">'+(times.length?times.map((t,i)=>'<div class="row split" style="gap:9px"><span class="n">'+(i+1)+'</span><span style="flex:1">'+fmt(t,2)+' s</span><button class="hb" data-a="shotDel" data-v="'+i+'" aria-label="Remover tiro '+(i+1)+'" style="width:44px;height:44px;color:var(--bad)">'+ic("fechar",17)+'</button></div>').join(""):'<div class="sub">Nenhum tiro.</div>')+'</div>'
-      +'<div style="display:flex;gap:8px;padding-top:10px"><input class="inp" id="shotAdd" inputmode="decimal" placeholder="tempo do tiro, ex: 2,35" aria-label="Tempo do tiro em segundos"><button class="btn p none" data-a="shotAdd" style="min-height:44px;border-radius:10px;font-size:14px">Adicionar</button></div>'
-      +'<div class="sub" style="font-size:12px;padding-top:6px">Remova falsos disparos ou inclua um tiro que o microfone perdeu. Tempos contados a partir do beep.</div>';}
+      +'<div style="display:flex;gap:8px;padding-top:10px"><input class="inp" id="shotAdd" inputmode="decimal" placeholder="tempo do tiro, ex: 2,35" aria-label="Tempo do tiro em segundos"><button class="btn p none" data-a="shotAdd" style="min-height:44px;border-radius:10px;font-size:var(--f-base)">Adicionar</button></div>'
+      +'<div class="sub" style="font-size:var(--f-aux);padding-top:6px">Remova falsos disparos ou inclua um tiro que o microfone perdeu. Tempos contados a partir do beep.</div>';}
   else shotsBox='<div class="rows" style="gap:9px">'+shotRows(r,true)+'</div>';
   return '<div class="scr">'+hdr(B.back("progress","Voltar ao progresso"),"Sessão",B.home)
     +'<div class="ttl" style="padding-top:0">'+esc(s.drillName)+'<div class="sub">'+meta+(ch?' · desafio '+esc(ch.name):'')+'</div></div>'
@@ -1502,7 +1589,7 @@ SCREENS.detail=()=>{const s=curSess();if(!s){S.screen="progress";return SCREENS.
     +'<div class="kpis">'+kpi(fmt(s.total,2),"Total")+kpi(s.first!=null?fmt(s.first,2):dash,"1º tiro")+kpi(isScored(s)?fmt(s.hf,2):dash,"Hit factor",true)+'</div>'
     +'<div class="body" style="padding:0;gap:0">'
     +'<div class="card" style="margin:0 18px 13px;width:auto"><div class="split"><div class="lbl">'+(S.detEdit?"Editar tiros":"Tiro a tiro")+'</div><button class="link" data-a="detEdit" style="padding:0">'+(S.detEdit?"Concluir":"Editar tiros")+'</button></div>'+shotsBox+'</div>'
-    +(s.scored===false?'<div class="card split" style="margin:0 18px 13px;width:auto;border-color:var(--acc)"><div><div style="font:600 15px var(--fb)">Sem pontuação</div><div class="sub">Pontue as zonas para entrar nas médias de HF e precisão.</div></div><button class="btn p none" data-a="rescore" style="min-height:48px;border-radius:12px;font-size:15px">Pontuar</button></div>'
+    +(s.scored===false?'<div class="card split" style="margin:0 18px 13px;width:auto;border-color:var(--acc)"><div><div style="font:600 var(--f-forte) var(--fb)">Sem pontuação</div><div class="sub">Pontue as zonas para entrar nas médias de HF e precisão.</div></div><button class="btn p none" data-a="rescore" style="min-height:48px;border-radius:12px;font-size:var(--f-forte)">Pontuar</button></div>'
       :'<div class="card split" style="margin:0 18px 13px;width:auto"><div><div class="lbl">Zonas</div><div class="sub" style="padding-top:4px">'+(s.zones?"A ×"+(s.zones.a||0)+" · C ×"+(s.zones.c||0)+" · D ×"+(s.zones.d||0)+" · miss ×"+(s.zones.ms||0)+" · "+s.points+" pts":(s.hits||0)+" acertos · "+(s.miss||0)+" erros")+'</div></div><button class="link" data-a="rescore" style="padding:0">Repontuar</button></div>')
     +'<div class="note">'+sessionInsight(s)+'</div></div>'
     +'<div class="foot"><button class="btn danger" data-a="sessDel">Excluir</button><button class="btn p x" data-a="repeat">Repetir drill</button></div></div>';
@@ -1543,10 +1630,10 @@ Object.assign(ACT,{
 SCREENS.drills=()=>{const q=S.dq.trim().toLowerCase();
   const list=DB.drills.filter(d=>(S.dfilter==="all"||d.tag===S.dfilter)&&(!q||d.name.toLowerCase().indexOf(q)>=0));
   return '<div class="scr">'+hdr(B.menu,"Drills · "+DB.drills.length,'<button class="hb" data-a="newDrill" aria-label="Criar drill">+</button>')
-    +'<div style="padding:0 18px 10px"><input class="inp" id="dq" value="'+esc(S.dq)+'" placeholder="Buscar drill" aria-label="Buscar drill" style="width:100%;border:1px solid var(--ctl);border-radius:12px;padding:12px 14px;font:400 15px var(--fb)"></div>'
+    +'<div style="padding:0 18px 10px"><input class="inp" id="dq" value="'+esc(S.dq)+'" placeholder="Buscar drill" aria-label="Buscar drill" style="width:100%;border:1px solid var(--ctl);border-radius:12px;padding:12px 14px;font:400 var(--f-ttl) var(--fb)"></div>'
     +'<div class="chips">'+CATS.map(c=>'<button class="chip'+(S.dfilter===c.k?" on":"")+'" data-a="dfilter" data-v="'+c.k+'">'+c.l+'</button>').join("")+'</div>'
     +'<div class="body" style="gap:10px" id="dlist">'+drillCards(list)+'</div><div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
-function drillCards(list){return list.length?list.map(d=>'<div class="card click" data-a="drillTrain" data-v="'+esc(d.id)+'" role="button" tabindex="0" style="padding:14px"><div class="split" style="align-items:flex-start"><div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="nm">'+esc(d.name)+'</span><span style="border:1px solid var(--ctl);border-radius:6px;padding:1px 7px;font:700 10px var(--fc);letter-spacing:.12em;text-transform:uppercase;color:var(--t3)">'+catLabel(d.tag)+'</span></div><div class="sub" style="font-size:13px;padding-top:2px">'+drillMeta(d)+'</div></div><button class="link" data-a="drillEdit" data-v="'+esc(d.id)+'" style="padding:4px 0 4px 10px;flex:none">editar</button></div></div>').join("")
+function drillCards(list){return list.length?list.map(d=>'<div class="card click" data-a="drillTrain" data-v="'+esc(d.id)+'" role="button" tabindex="0" style="padding:14px"><div class="split" style="align-items:flex-start"><div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="nm">'+esc(d.name)+'</span><span style="border:1px solid var(--ctl);border-radius:6px;padding:1px 7px;font:700 var(--f-micro) var(--fc);letter-spacing:.12em;text-transform:uppercase;color:var(--t3)">'+catLabel(d.tag)+'</span></div><div class="sub" style="font-size:var(--f-aux);padding-top:2px">'+drillMeta(d)+'</div></div><button class="link" data-a="drillEdit" data-v="'+esc(d.id)+'" style="padding:4px 0 4px 10px;flex:none">editar</button></div></div>').join("")
   :'<div class="empty">Nada encontrado. Ajuste a busca ou o filtro.</div>';}
 document.addEventListener("input",e=>{if(e.target&&e.target.id==="dq"){S.dq=e.target.value;const l=$("#dlist");if(l){const q=S.dq.trim().toLowerCase();l.innerHTML=drillCards(DB.drills.filter(d=>(S.dfilter==="all"||d.tag===S.dfilter)&&(!q||d.name.toLowerCase().indexOf(q)>=0)));}}});
 document.addEventListener("keydown",e=>{const el=e.target;if(e.key==="Enter"&&el&&el.getAttribute&&el.getAttribute("role")==="button"&&el.dataset&&el.dataset.a){e.preventDefault();el.click();}if(e.key==="Enter"&&el&&el.id==="shotAdd")ACT.shotAdd();});
@@ -1562,19 +1649,19 @@ Object.assign(ACT,{
    ============================================================================= */
 SCREENS.newDrill=()=>{const n=S.nd;if(!n){S.screen="drills";return SCREENS.drills();}
   const editing=!!n.editId,maxAfter=Math.max(1,n.shots-1);if(n.after>maxAfter)n.after=maxAfter;
-  const cell=(label,act,val,help)=>'<div class="card" style="padding:12px"><div class="lbl" style="font-size:10.5px">'+label+'</div>'+stepper(act,val,label.toLowerCase())+(help?'<div class="sub" style="font-size:12px;padding-top:7px">'+help+'</div>':'')+'</div>';
+  const cell=(label,act,val,help)=>'<div class="card" style="padding:12px"><div class="lbl" style="font-size:var(--f-micro)">'+label+'</div>'+stepper(act,val,label.toLowerCase())+(help?'<div class="sub" style="font-size:var(--f-aux);padding-top:7px">'+help+'</div>':'')+'</div>';
   const preview="Prévia: "+(n.shots>0?plural(n.shots,"tiro","tiros"):"tiros livres")+(n.perShot>0&&n.shots>0?" em até "+fmt(n.perShot,2)+" s cada":"")+", a "+fnum(n.dist)+" m · "+catLabel(n.tag)+(n.reload&&n.shots>1?" · recarga após o tiro "+n.after:"")+(n.pen>0?" · +"+fmt(n.pen,1)+" s por erro":"")+".";
   return '<div class="scr">'+hdr(B.back("drills","Voltar aos drills"),editing?"Editar drill":"Criar drill",B.home)
     +'<div class="body">'
-    +'<label class="card" style="display:block"><div class="lbl">Nome</div><input class="inp" id="ndName" value="'+esc(n.name)+'" '+(n.builtin?"disabled ":"")+'placeholder="ex: Saque rápido" style="width:100%;margin-top:8px;font:500 16px var(--fb)'+(n.builtin?";border-color:var(--ctl);color:var(--t3)":"")+'">'+(n.builtin?'<div class="sub" style="font-size:12px;padding-top:6px">Drill de fábrica: o nome não muda, o resto sim.</div>':'')+'</label>'
+    +'<label class="card" style="display:block"><div class="lbl">Nome</div><input class="inp" id="ndName" value="'+esc(n.name)+'" '+(n.builtin?"disabled ":"")+'placeholder="ex: Saque rápido" style="width:100%;margin-top:8px;font:500 var(--f-ttl) var(--fb)'+(n.builtin?";border-color:var(--ctl);color:var(--t3)":"")+'">'+(n.builtin?'<div class="sub" style="font-size:var(--f-aux);padding-top:6px">Drill de fábrica: o nome não muda, o resto sim.</div>':'')+'</label>'
     +'<div class="card"><div class="lbl">Categoria</div><div style="display:flex;gap:7px;flex-wrap:wrap;padding-top:9px">'+CATS.filter(c=>c.k!=="all").map(c=>'<button class="chip'+(n.tag===c.k?" on":"")+'" data-a="ndTag" data-v="'+c.k+'">'+c.l+'</button>').join("")+'</div></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">'
       +cell("Tiros","ndShots",n.shots>0?n.shots:"livre","")+cell("Distância (m)","ndDist",fnum(n.dist),"")
       +cell("Tempo-alvo por tiro","ndPar",n.perShot>0?fmt(n.perShot,2):"0","Quanto cada tiro deveria levar. 0 = sem alvo de tempo.")
       +cell("Penalidade por erro","ndPen",fmt(n.pen,1),"Segundos somados ao seu tempo por tiro fora do alvo.")+'</div>'
-    +'<label class="card" style="display:block"><div class="lbl">Como executar</div><textarea id="ndDesc" rows="3" placeholder="ex: Saque do coldre, 2 tiros no peito e 1 na cabeça. Arma carregada, mãos na altura dos ombros." style="width:100%;min-height:88px;margin-top:8px;background:var(--bg);border:1px solid var(--ctl);border-radius:10px;padding:11px 12px;font:400 14.5px var(--fb);color:var(--t1);resize:vertical">'+esc(n.desc)+'</textarea><div class="sub" style="font-size:12px;padding-top:6px">Aparece na hora de treinar, antes de você começar.</div></label>'
-    +'<label class="card" style="display:block"><div class="lbl">Alvo recomendado</div><input class="inp" id="ndTarget" list="tgtList" value="'+esc(n.target)+'" placeholder="ex: Silhueta IPSC (A/C/D)" style="width:100%;margin-top:8px;border:1px solid var(--ctl);font:400 14.5px var(--fb)"><datalist id="tgtList"><option>Silhueta IPSC (A/C/D)</option><option>Silhueta IDPA</option><option>Bullseye / B8</option><option>Alvo de pontos 3"</option><option>Aço (popper/plate)</option><option>Silhueta policial (B27)</option><option>Cartão 3x5" + círculo 8"</option></datalist></label>'
-    +'<button class="card split" data-a="ndReload" role="switch" aria-checked="'+n.reload+'"><div><div style="font:500 15px var(--fb)">Tem recarga</div><div class="sub" style="font-size:12.5px">esse split vira "recarga" nos relatórios</div></div><span class="tg'+(n.reload?" on":"")+'"><i></i></span></button>'
+    +'<label class="card" style="display:block"><div class="lbl">Como executar</div><textarea id="ndDesc" rows="3" placeholder="ex: Saque do coldre, 2 tiros no peito e 1 na cabeça. Arma carregada, mãos na altura dos ombros." style="width:100%;min-height:88px;margin-top:8px;background:var(--bg);border:1px solid var(--ctl);border-radius:10px;padding:11px 12px;font:400 var(--f-ttl) var(--fb);color:var(--t1);resize:vertical">'+esc(n.desc)+'</textarea><div class="sub" style="font-size:var(--f-aux);padding-top:6px">Aparece na hora de treinar, antes de você começar.</div></label>'
+    +'<label class="card" style="display:block"><div class="lbl">Alvo recomendado</div><input class="inp" id="ndTarget" list="tgtList" value="'+esc(n.target)+'" placeholder="ex: Silhueta IPSC (A/C/D)" style="width:100%;margin-top:8px;border:1px solid var(--ctl);font:400 var(--f-base) var(--fb)"><datalist id="tgtList"><option>Silhueta IPSC (A/C/D)</option><option>Silhueta IDPA</option><option>Bullseye / B8</option><option>Alvo de pontos 3"</option><option>Aço (popper/plate)</option><option>Silhueta policial (B27)</option><option>Cartão 3x5" + círculo 8"</option></datalist></label>'
+    +'<button class="card split" data-a="ndReload" role="switch" aria-checked="'+n.reload+'"><div><div style="font:500 var(--f-forte) var(--fb)">Tem recarga</div><div class="sub" style="font-size:var(--f-aux)">esse split vira "recarga" nos relatórios</div></div><span class="tg'+(n.reload?" on":"")+'"><i></i></span></button>'
     +(n.reload?(n.shots>1?'<div class="card"><div class="lbl">Recarga após o tiro</div>'+stepper("ndAfter",n.after,"posição da recarga")+'</div>':'<div class="sub" style="padding:0 2px">Precisa de pelo menos 2 tiros para marcar a recarga.</div>'):'')
     +'<div class="note" style="margin:0">'+preview+'</div>'
     +(editing&&!n.builtin?'<button class="btn danger" data-a="ndDelete" style="flex:none;min-height:52px">Excluir este drill</button>':'')
@@ -1624,24 +1711,24 @@ function curPreset(){const s=DB.settings,db=Math.round(marginDb(s.sens));
 SCREENS.mic=()=>{const s=DB.settings,db=Math.round(marginDb(s.sens)),cp=curPreset();
   return '<div class="scr">'+hdr(B.back(S.micFrom||"settings","Voltar"),"Ajuste de captação",B.home)
     +'<div class="body">'
-    +'<div class="sub" style="font-size:14px;color:var(--t2)">Bata uma palma forte. Seus disparos precisam cruzar a linha branca; o fundo, não.</div>'
+    +'<div class="sub" style="font-size:var(--f-base);color:var(--t2)">Bata uma palma forte. Seus disparos precisam cruzar a linha branca; o fundo, não.</div>'
     +(S.micErr?'<div class="warn">Microfone indisponível. Veja Config → Microfone → Permissão do microfone.</div>':'')
     +'<div class="card" style="background:var(--rec);padding:12px"><div style="position:relative;height:148px;display:flex;align-items:flex-end;gap:2px" id="viz" aria-hidden="true">'+Array.from({length:40},()=>'<i style="flex:1;height:2%;background:var(--bar);border-radius:2px 2px 0 0"></i>').join("")
       +'<div id="vizTh" style="position:absolute;left:0;right:0;height:0;border-top:2px solid #fff;bottom:50%"></div><div id="vizFl" style="position:absolute;left:0;right:0;height:0;border-top:1.5px dashed var(--t3);bottom:10%"></div></div>'
-      +'<div class="lbl" style="font-size:10px;padding-top:8px">Branca = gatilho · cinza = ruído</div></div>'
+      +'<div class="lbl" style="font-size:var(--f-micro);padding-top:8px">Branca = gatilho · cinza = ruído</div></div>'
     +'<div style="display:flex;gap:9px">'+kpi('<span id="cDet" style="color:var(--ok)">0</span>',"Detectados")+kpi('<span id="cPk">'+dash+'</span>',"Pico dB")+kpi('<span id="cFl">'+dash+'</span>',"Piso dB")+'</div>'
     +'<div class="card"><div class="lbl">Ambiente</div><div style="display:flex;flex-direction:column;gap:7px;padding-top:9px">'
-      +MIC_PRESETS.map(p=>'<button class="card click split" data-a="micPreset" data-v="'+p.k+'" style="padding:11px 12px'+(cp===p.k?";border-color:var(--acc);background:var(--acc-bg)":"")+'"><div><div style="font:600 15px var(--fb)">'+p.l+'</div><div class="sub" style="font-size:12.5px">'+p.sub+' · '+p.db+' dB · '+p.echo+' ms'+(p.clip?' · impacto forte':'')+'</div></div><span style="color:var(--acc);font-weight:700">'+(cp===p.k?"✓":"")+'</span></button>').join("")
-      +'</div>'+(cp?'':'<div class="sub" style="font-size:12px;padding-top:8px">Ajuste manual em uso.</div>')+'</div>'
-    +'<button class="card click split" data-a="listen" style="border-color:var(--ctl)"><div><div style="font:600 15px var(--fb)">Ouvir o ambiente</div><div class="sub" style="font-size:12.5px">mede os tiros dos vizinhos sem salvar nada</div></div><span style="color:var(--acc)">›</span></button>'
+      +MIC_PRESETS.map(p=>'<button class="card click split" data-a="micPreset" data-v="'+p.k+'" style="padding:11px 12px'+(cp===p.k?";border-color:var(--acc);background:var(--acc-bg)":"")+'"><div><div style="font:600 var(--f-forte) var(--fb)">'+p.l+'</div><div class="sub" style="font-size:var(--f-aux)">'+p.sub+' · '+p.db+' dB · '+p.echo+' ms'+(p.clip?' · impacto forte':'')+'</div></div><span style="color:var(--acc);font-weight:700">'+(cp===p.k?"✓":"")+'</span></button>').join("")
+      +'</div>'+(cp?'':'<div class="sub" style="font-size:var(--f-aux);padding-top:8px">Ajuste manual em uso.</div>')+'</div>'
+    +'<button class="card click split" data-a="listen" style="border-color:var(--ctl)"><div><div style="font:600 var(--f-forte) var(--fb)">Ouvir o ambiente</div><div class="sub" style="font-size:var(--f-aux)">mede os tiros dos vizinhos sem salvar nada</div></div><span style="color:var(--acc)">›</span></button>'
     +'<details class="adv"'+(cp?'':' open')+'><summary>Avançado<span style="color:var(--t3)">⌄</span></summary><div class="inner">'
-      +'<div><div class="split"><div class="lbl">Margem de detecção</div><div class="sub" style="font-size:12px">acima do ruído</div></div>'+stepper("micMargin",db+" dB","margem")+'<div class="sub" style="font-size:12.5px;padding-top:8px;color:'+(db<10||db>22?"var(--acc)":"var(--t3)")+'">'+micAdvice(db)+'</div></div>'
-      +'<div><div class="split"><div class="lbl">Janela anti-eco</div><div class="sub" style="font-size:12px">ms</div></div>'+stepper("micEcho",(s.echoBlank||150),"janela anti-eco")+'<div class="sub" style="font-size:12.5px;padding-top:8px">Janela maior ignora mais eco, mas perde splits muito rápidos. Indoor pede janela maior.</div></div>'
+      +'<div><div class="split"><div class="lbl">Margem de detecção</div><div class="sub" style="font-size:var(--f-aux)">acima do ruído</div></div>'+stepper("micMargin",db+" dB","margem")+'<div class="sub" style="font-size:var(--f-aux);padding-top:8px;color:'+(db<10||db>22?"var(--acc)":"var(--t3)")+'">'+micAdvice(db)+'</div></div>'
+      +'<div><div class="split"><div class="lbl">Janela anti-eco</div><div class="sub" style="font-size:var(--f-aux)">ms</div></div>'+stepper("micEcho",(s.echoBlank||150),"janela anti-eco")+'<div class="sub" style="font-size:var(--f-aux);padding-top:8px">Janela maior ignora mais eco, mas perde splits muito rápidos. Indoor pede janela maior.</div></div>'
       /* v10 C3: este botão tinha 36px de altura de toque (padding:0) — abaixo do
          mínimo confortável de 44–48px, e é usado com luva e protetor auricular.
          min-height:52px + padding vertical resolvem sem mudar o visual da linha. */
-      +'<button class="split" data-a="micClip" role="switch" aria-checked="'+!!s.requireClip+'" style="background:none;border:0;padding:11px 0;min-height:52px;text-align:left;cursor:pointer;width:100%"><div><div style="font:500 15px var(--fb);color:var(--t1)">Exigir impacto forte</div><div class="sub" style="font-size:12.5px">só conta sons que saturam o microfone</div></div><span class="tg'+(s.requireClip?" on":"")+'"><i></i></span></button>'
-      +'<label style="display:block"><div class="lbl">Dispositivo de áudio</div><select id="micDev" style="width:100%;margin-top:8px;background:var(--bg);color:var(--t1);border:1px solid var(--ctl);border-radius:10px;padding:11px;font:400 14.5px var(--fb)"><option value="">Padrão do aparelho</option>'+S.micDevs.map((d,i)=>'<option value="'+esc(d.deviceId)+'"'+(d.deviceId===s.audioDeviceId?" selected":"")+'>'+esc(d.label||"Microfone "+(i+1))+'</option>').join("")+'</select><div class="sub" id="micProcLine" style="font-size:12.5px;padding-top:8px"></div></label>'
+      +'<button class="split" data-a="micClip" role="switch" aria-checked="'+!!s.requireClip+'" style="background:none;border:0;padding:11px 0;min-height:52px;text-align:left;cursor:pointer;width:100%"><div><div style="font:500 var(--f-forte) var(--fb);color:var(--t1)">Exigir impacto forte</div><div class="sub" style="font-size:var(--f-aux)">só conta sons que saturam o microfone</div></div><span class="tg'+(s.requireClip?" on":"")+'"><i></i></span></button>'
+      +'<label style="display:block"><div class="lbl">Dispositivo de áudio</div><select id="micDev" style="width:100%;min-height:48px;margin-top:8px;background:var(--bg);color:var(--t1);border:1px solid var(--ctl);border-radius:10px;padding:11px;font:400 var(--f-ttl) var(--fb)"><option value="">Padrão do aparelho</option>'+S.micDevs.map((d,i)=>'<option value="'+esc(d.deviceId)+'"'+(d.deviceId===s.audioDeviceId?" selected":"")+'>'+esc(d.label||"Microfone "+(i+1))+'</option>').join("")+'</select><div class="sub" id="micProcLine" style="font-size:var(--f-aux);padding-top:8px"></div></label>'
       +'</div></details>'
     +'</div><div class="foot"><button class="btn" data-a="micRelearn">Reaprender</button><button class="btn p x" data-a="go" data-v="'+(S.micFrom||"settings")+'">Concluir</button></div></div>';};
 async function openMic(){const tok=++calOpenTok;calDet=newDetector();calHist=[];calCount=0;
@@ -1748,24 +1835,24 @@ SCREENS.micperm=()=>{
   if(pi.st==="denied")return '<div class="scr">'+hdr(B.back(back,"Voltar"),"Microfone",B.home)
     +'<div class="body">'
     +'<div class="warn">O navegador bloqueou o microfone para este site</div>'
-    +'<div class="sub" style="font-size:14px;color:var(--t2);line-height:1.5">Depois de um “bloquear” nenhum navegador pergunta de novo — a liberação é feita à mão, nas permissões do site:</div>'
-    +'<div class="card" style="display:flex;flex-direction:column;gap:11px">'+micUnblockSteps().map((t,i)=>'<div style="display:flex;gap:11px;font:400 14px var(--fb);color:var(--t2)"><span class="mono" style="color:var(--acc);font-weight:700">'+(i+1)+'</span><span>'+esc(t)+'</span></div>').join("")+'</div>'
-    +'<div class="sub" style="font-size:12.5px">Se nenhum site pegar o microfone, o bloqueio é do sistema: Ajustes / Preferências → Privacidade → Microfone → seu navegador.</div>'
+    +'<div class="sub" style="font-size:var(--f-base);color:var(--t2);line-height:1.5">Depois de um “bloquear” nenhum navegador pergunta de novo — a liberação é feita à mão, nas permissões do site:</div>'
+    +'<div class="card" style="display:flex;flex-direction:column;gap:11px">'+micUnblockSteps().map((t,i)=>'<div style="display:flex;gap:11px;font:400 var(--f-base) var(--fb);color:var(--t2)"><span class="mono" style="color:var(--acc);font-weight:700">'+(i+1)+'</span><span>'+esc(t)+'</span></div>').join("")+'</div>'
+    +'<div class="sub" style="font-size:var(--f-aux)">Se nenhum site pegar o microfone, o bloqueio é do sistema: Ajustes / Preferências → Privacidade → Microfone → seu navegador.</div>'
     +'</div><div class="foot" style="flex-direction:column"><button class="btn p" data-a="micRetry" style="flex:none">Já liberei — testar de novo</button>'+b2+'</div></div>';
 
   if(pi.st==="granted")return '<div class="scr">'+hdr(B.back(back,"Voltar"),"Microfone",B.home)
     +'<div class="body">'
-    +'<div class="card split" style="border-color:var(--ok)"><div><div style="font:600 16px var(--fb)">Microfone liberado</div><div class="sub" style="font-size:12.5px">pronto para detectar os tiros</div></div><span style="color:var(--ok);font:700 12px var(--fc);letter-spacing:.14em">✓ LIBERADO</span></div>'
-    +'<div class="sub" style="font-size:14px;color:var(--t2);line-height:1.5">O áudio é analisado no próprio aparelho e descartado quadro a quadro. Nada sai daqui — exceto no Modo laboratório, que você liga de propósito.</div>'
-    +'<button class="card click split" data-a="go" data-v="mic" style="border-color:var(--acc);background:var(--acc-bg)"><div><div style="font:600 15px var(--fb)">Ajuste de captação</div><div class="sub" style="font-size:12.5px">margem, anti-eco e teste ao vivo</div></div><span style="color:var(--acc);font-weight:700">›</span></button>'
+    +'<div class="card split" style="border-color:var(--ok)"><div><div style="font:600 var(--f-ttl) var(--fb)">Microfone liberado</div><div class="sub" style="font-size:var(--f-aux)">pronto para detectar os tiros</div></div><span style="color:var(--ok);font:700 var(--f-aux) var(--fc);letter-spacing:.14em">✓ LIBERADO</span></div>'
+    +'<div class="sub" style="font-size:var(--f-base);color:var(--t2);line-height:1.5">O áudio é analisado no próprio aparelho e descartado quadro a quadro. Nada sai daqui — exceto no Modo laboratório, que você liga de propósito.</div>'
+    +'<button class="card click split" data-a="go" data-v="mic" style="border-color:var(--acc);background:var(--acc-bg)"><div><div style="font:600 var(--f-forte) var(--fb)">Ajuste de captação</div><div class="sub" style="font-size:var(--f-aux)">margem, anti-eco e teste ao vivo</div></div><span style="color:var(--acc);font-weight:700">›</span></button>'
     +'</div><div class="foot"><button class="btn" data-a="micRetry">Testar o microfone</button><button class="btn p x" data-a="go" data-v="'+back+'">Concluir</button></div></div>';
 
   return '<div class="scr">'+hdr(B.back(back,"Voltar"),"Microfone",B.home)
     +'<div class="body" style="justify-content:center;align-items:center;text-align:center;gap:14px;padding-top:20px">'
     +'<div style="width:82px;height:82px;border-radius:22px;border:2px solid var(--acc);display:flex;align-items:center;justify-content:center;color:var(--acc)">'+ic("microfone",38)+'</div>'
-    +'<div style="font:600 24px var(--fb)">Liberar o microfone</div>'
-    +'<div style="font:400 14.5px var(--fb);color:var(--t2);line-height:1.5;max-width:300px">O Cadência ouve os disparos para marcar cada tiro. Nada é enviado: o áudio é analisado no próprio celular e descartado.</div>'
-    +'<div class="card" style="text-align:left;display:flex;flex-direction:column;gap:9px">'+["Tempo de cada tiro sem tocar na tela","Splits e hit factor calculados sozinhos","Funciona offline, no stand"].map(t=>'<div style="display:flex;gap:10px;font:400 14px var(--fb);color:var(--t2)"><span style="color:var(--ok)">✓</span>'+t+'</div>').join("")+'</div>'
+    +'<div style="font:600 var(--f-n2) var(--fb)">Liberar o microfone</div>'
+    +'<div style="font:400 var(--f-base) var(--fb);color:var(--t2);line-height:1.5;max-width:300px">O Cadência ouve os disparos para marcar cada tiro. Nada é enviado: o áudio é analisado no próprio celular e descartado.</div>'
+    +'<div class="card" style="text-align:left;display:flex;flex-direction:column;gap:9px">'+["Tempo de cada tiro sem tocar na tela","Splits e hit factor calculados sozinhos","Funciona offline, no stand"].map(t=>'<div style="display:flex;gap:10px;font:400 var(--f-base) var(--fb);color:var(--t2)"><span style="color:var(--ok)">✓</span>'+t+'</div>').join("")+'</div>'
     /* https é pré-requisito do getUserMedia: sem isso o pedido nem aparece */
     +(window.isSecureContext===false?'<div class="warn">Este endereço não é https — o navegador não libera o microfone. Abra pelo endereço https do site.</div>':'')
     +'</div><div class="foot" style="flex-direction:column"><button class="btn p" data-a="micAllow" style="flex:none">Permitir microfone</button>'+b2+'</div></div>';
@@ -1905,9 +1992,9 @@ SCREENS.lab=()=>{if(!LAB){S.screen="home";return SCREENS.home();}const l=LAB.lab
     +'<div class="ttl" style="padding-top:0">Sessão de laboratório<div class="sub">'+esc(m.drill)+(T&&T.reps>1?' · rep '+m.rep+' de '+T.reps:'')+' · áudio + linha do tempo do detector</div></div>'
     +'<div class="kpis">'+kpi(m.detectedShots,"Detectados")+kpi(m.expectedShots>0?m.expectedShots:"livre","Esperados")+kpi(m.sampleRate?Math.round(m.sampleRate/1000)+"k":dash,"Sample rate")+'</div>'
     +'<div class="body">'
-    +'<div class="card"><div class="lbl">Quantos tiros você realmente deu?</div><input class="inp" id="labReal" inputmode="numeric" value="'+esc(LAB.real)+'" placeholder="ex: '+m.detectedShots+'" style="width:100%;margin-top:8px;font:700 20px var(--fm)"><div class="sub" style="font-size:12px;padding-top:6px">É a verdade de referência para calibrar o microfone depois.</div></div>'
-    +'<label class="card" style="display:block"><div class="lbl">Observações</div><textarea id="labObs" rows="3" placeholder="quem estava na linha, calibres, indoor/outdoor, distância do celular…" style="width:100%;margin-top:8px;background:var(--bg);border:1px solid var(--ctl);border-radius:10px;padding:11px 12px;font:400 14.5px var(--fb);color:var(--t1);resize:vertical">'+esc(LAB.obs)+'</textarea></label>'
-    +'<div class="sub" style="font-size:12.5px">Áudio do aparelho: '+(p?"ganho auto "+(p.autoGainControl?"ligado":"desligado")+" · redução de ruído "+(p.noiseSuppression?"ligada":"desligada"):"não informado")+' · '+l.tl.length+' quadros registrados.</div>'
+    +'<div class="card"><div class="lbl">Quantos tiros você realmente deu?</div><input class="inp" id="labReal" inputmode="numeric" value="'+esc(LAB.real)+'" placeholder="ex: '+m.detectedShots+'" style="width:100%;margin-top:8px;font:700 var(--f-n1) var(--fm)"><div class="sub" style="font-size:var(--f-aux);padding-top:6px">É a verdade de referência para calibrar o microfone depois.</div></div>'
+    +'<label class="card" style="display:block"><div class="lbl">Observações</div><textarea id="labObs" rows="3" placeholder="quem estava na linha, calibres, indoor/outdoor, distância do celular…" style="width:100%;margin-top:8px;background:var(--bg);border:1px solid var(--ctl);border-radius:10px;padding:11px 12px;font:400 var(--f-ttl) var(--fb);color:var(--t1);resize:vertical">'+esc(LAB.obs)+'</textarea></label>'
+    +'<div class="sub" style="font-size:var(--f-aux)">Áudio do aparelho: '+(p?"ganho auto "+(p.autoGainControl?"ligado":"desligado")+" · redução de ruído "+(p.noiseSuppression?"ligada":"desligada"):"não informado")+' · '+l.tl.length+' quadros registrados.</div>'
     +(l.blob?'':'<div class="warn" style="text-align:left">'+(l.recErr?"Este aparelho não gravou o áudio — os dados (JSON) continuam disponíveis.":"Áudio vazio.")+'</div>')
     +'<div style="display:flex;gap:11px">'+(l.blob?'<button class="btn" data-a="labAudio">Baixar áudio</button>':'')+'<button class="btn" data-a="labJson">Baixar dados</button></div>'
     /* v10.6: o envio virou automático ao concluir. O que fica aqui é o estado —
@@ -1916,7 +2003,7 @@ SCREENS.lab=()=>{if(!LAB){S.screen="home";return SCREENS.home();}const l=LAB.lab
       return '<div class="note" style="margin:0">A linha do tempo (só números: pico, piso, limiar e guarda por quadro) sobe sozinha ao concluir, para a análise do detector. O áudio fica só neste aparelho.'
         +(f?' <b>'+plural(f,"sessão esperando envio","sessões esperando envio")+'.</b>':'')+'</div>'
         +(f?'<button class="btn" data-a="labUp" style="flex:none;min-height:52px">Tentar enviar agora</button>':'');})():'')
-    +(LAB.msg?'<div class="sub" style="font-size:13px;color:var(--t2)">'+esc(LAB.msg)+'</div>':'')
+    +(LAB.msg?'<div class="sub" style="font-size:var(--f-aux);color:var(--t2)">'+esc(LAB.msg)+'</div>':'')
     +'</div><div class="foot"><button class="btn p" data-a="labGo">Continuar</button></div></div>';};
 document.addEventListener("input",e=>{if(!LAB||!e.target)return;if(e.target.id==="labReal")LAB.real=e.target.value.replace(/[^0-9]/g,"");else if(e.target.id==="labObs")LAB.obs=e.target.value;});
 Object.assign(ACT,{
@@ -1982,9 +2069,9 @@ function holdStop(){clearTimeout(holdT);clearTimeout(holdI);holdT=holdI=null;}
 function captureReport(r){const ev=r&&r.events||[];if(!ev.length)return "";
   const hits=ev.filter(e=>e.shot),miss=ev.filter(e=>!e.shot);
   const rows=ev.slice(-12).map(e=>'<div class="tr"><span>'+fmt(e.t,2)+' s</span><span>'+Math.round(dbOf(e.peak))+' dB</span><span>'+(e.clip>0?fmt(e.clip*100,1)+"%":"0%")+'</span><span style="color:'+(e.shot?"var(--ok)":"var(--t3)")+'">'+(e.shot?"tiro":"ignorado")+'</span></div>').join("");
-  return '<div class="card" style="margin:0 18px 13px;width:auto"><div class="split"><div class="lbl">Captação</div><div class="sub" style="font-size:12.5px">'+ev.length+' sons · '+hits.length+' viraram tiro · '+miss.length+' ignorados</div></div>'
+  return '<div class="card" style="margin:0 18px 13px;width:auto"><div class="split"><div class="lbl">Captação</div><div class="sub" style="font-size:var(--f-aux)">'+ev.length+' sons · '+hits.length+' viraram tiro · '+miss.length+' ignorados</div></div>'
     +'<div class="tbl" style="margin:10px 0 0"><div class="tr h"><span>Tempo</span><span>Pico</span><span>Clip</span><span>Decisão</span></div>'+rows+'</div>'
-    +'<div class="sub" style="font-size:12px;padding-top:8px">Clip alto = som que saturou o microfone (normalmente o seu tiro). Use isso para ajustar o filtro de vizinho.</div></div>';}
+    +'<div class="sub" style="font-size:var(--f-aux);padding-top:8px">Clip alto = som que saturou o microfone (normalmente o seu tiro). Use isso para ajustar o filtro de vizinho.</div></div>';}
 
 /* =============================================================================
    A2 — MODO ESCUTA: ouve o ambiente sem drill e sem salvar sessão
@@ -2010,7 +2097,7 @@ Object.assign(S,{chalId:null,nc:null,code:"",codeFound:null,codeMsg:"",rankRows:
 /* folha de confirmação com uma terceira opção (usada no import: mesclar x substituir) */
 askSheet=function(){const a=S.ask;
   return '<div class="ovl" role="alertdialog" aria-modal="true" aria-label="'+esc(a.title)+'"><button class="scrim" data-a="askNo" aria-label="Cancelar"></button><div class="sheet">'
-    +'<div style="font:600 20px var(--fb)">'+esc(a.title)+'</div><div style="font:400 14px var(--fb);color:var(--t2);line-height:1.45">'+esc(a.body)+'</div>'
+    +'<div style="font:600 var(--f-n1) var(--fb)">'+esc(a.title)+'</div><div style="font:400 var(--f-base) var(--fb);color:var(--t2);line-height:1.45">'+esc(a.body)+'</div>'
     +'<button class="btn '+(a.danger?"bad":"p")+'" data-a="askYes" style="flex:none;min-height:56px;border-radius:14px">'+esc(a.ok)+'</button>'
     +(a.alt?'<button class="btn" data-a="askAlt" style="flex:none;min-height:52px;border-radius:14px">'+esc(a.alt.label)+'</button>':'')
     +'<button class="btn" data-a="askNo" style="flex:none;min-height:52px;border-radius:14px">Cancelar</button></div></div>';};
@@ -2032,6 +2119,51 @@ function rowsFor(ch){if(!ch)return [];if(!ch.online)return localRows(ch);
   const rows=(S.rankRows&&S.rankRows.id===ch.id?S.rankRows.rows:null)||ch.lastRows||[];const m=ch.metric||"hf",high=m==="hf";
   const val=s=>m==="hf"?(+s.hf||0):m==="total"?(+s.total||9999):(s.first==null?9999:+s.first);
   return rows.slice().sort((a,b)=>high?val(b)-val(a):val(a)-val(b)).map(r=>Object.assign({},r,{me:r.uid&&fb.uid&&r.uid===fb.uid}));}
+/* =============================================================================
+   v10.7 — FECHAR E EDITAR DESAFIO
+
+   PRECISAO DE VOCABULARIO: "fechar" NAO e "apagar". Duas razoes independentes
+   levam ao mesmo desenho:
+
+   1. O Firestore nao apaga subcolecao em cascata pelo SDK do cliente. Apagar o
+      documento do desafio deixaria a subcolecao de resultados orfa, invisivel e
+      ocupando cota para sempre. E um resultado so pode ser apagado pelo proprio
+      autor, entao nem limpando um por um o dono daria conta.
+   2. Sondagem das regras em 16/10/2026: o dono consegue ESCREVER no proprio
+      desafio (200) mas NINGUEM consegue apagar, nem o dono (403). Nao existe
+      regra de delete. Fechar funciona hoje, sem mexer em regra; apagar nao
+      funcionaria nem com codigo novo.
+
+   Entao encerrar e um campo: `encerrado: true`. O ranking continua legivel, o
+   desafio para de aceitar tentativa e sai da lista publica. E reversivel.
+
+   LIMITE CONHECIDO: o bloqueio de nova tentativa e do APP, nao da regra. A regra
+   do resultado olha o uid de quem escreve, nao o estado do desafio pai; checar o
+   pai custaria uma leitura por escrita e uma regra nova. Para um app de treino
+   entre conhecidos isso e proporcional — mas esta escrito aqui para nao ser
+   descoberto como surpresa depois.
+   ============================================================================= */
+/* Encerrado pelo dono ou vencido pelo prazo: o efeito pratico e o mesmo, e
+   separar as duas coisas seria pedir para o usuario entender uma diferenca que
+   nao muda nada para ele. */
+function chalFechado(ch){if(!ch)return false;if(ch.encerrado)return true;
+  const dl=daysLeft(ch);return dl!=null&&dl<=0;}
+/* Desafio local esta no proprio aparelho, logo e sempre meu. Online, so se o uid
+   bate — e exatamente o mesmo teste que a regra do Firestore faz do outro lado. */
+function souDono(ch){return !!ch&&(!ch.online||(!!ch.ownerUid&&!!fb.uid&&ch.ownerUid===fb.uid));}
+/* Com resultado na mesa, drill / metrica / distancia travam. Nao e por causa de
+   dado: o resultado guarda tempo, hit factor, precisao e 1o tiro, entao reordenar
+   e possivel. E por causa de JUSTICA — quem atirou atirou naquele drill, naquela
+   distancia, valendo aquela metrica. Trocar depois nao corrompe nada; muda quem
+   ganhou, sem a pessoa saber. Nome e prazo nao tem esse problema. */
+function chalTemResultado(ch){return rowsFor(ch).length>0;}
+/* Conta de verdade no servidor, no momento de salvar. rowsFor() pode nao ter
+   visto resultado que existe (ranking nunca aberto, cache vazio), e nesse caso a
+   trava acima seria so decorativa. Uma leitura, so quando o campo travado mudou. */
+async function contaResultados(ch){
+  if(!ch.online)return rowsFor(ch).length;
+  try{const q=await fb.db.collection("challenges").doc(ch.code).collection("results").limit(1).get();
+    return q.size;}catch(e){return -1;}}   /* -1 = nao deu para saber */
 function myPos(ch){const r=rowsFor(ch),i=r.findIndex(x=>x.me);return i<0?null:i+1;}
 
 SCREENS.challenges=()=>{
@@ -2039,28 +2171,29 @@ SCREENS.challenges=()=>{
   const card=ch=>{const d=drillById(ch.drillId),n=ch.online?(rowsFor(ch).length||(ch.lastRows||[]).length):new Set(DB.sessions.filter(s=>s.challengeId===ch.id).map(s=>s.profileId)).size;
     const dl=daysLeft(ch),pos=myPos(ch);
     return '<button class="card click" data-a="openChal" data-v="'+esc(ch.id)+'" style="padding:14px"><div class="split" style="align-items:flex-start"><div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="nm">'+esc(ch.name)+'</span>'
-      +(ch.online?'<span style="background:var(--acc);color:#101317;border-radius:6px;padding:1px 7px;font:700 10px var(--fc);letter-spacing:.12em">ONLINE</span>':'<span style="border:1px solid var(--ctl);color:var(--t3);border-radius:6px;padding:1px 7px;font:700 10px var(--fc);letter-spacing:.12em">LOCAL</span>')+'</div>'
-      +'<div class="sub" style="font-size:13px;padding-top:3px">'+esc(d?d.name:(ch.drillName||"drill removido"))+' · '+fnum(ch.dist)+' m · '+metricLabel(ch.metric)+'</div></div></div>'
-      +'<div class="split" style="padding-top:9px"><div class="sub" style="font-size:12.5px">'+plural(n,"atirador","atiradores")+(dl!=null?(dl>0?" · encerra em "+plural(dl,"dia","dias"):" · encerrado"):"")+'</div>'+(pos?'<span class="mono" style="font-weight:700;color:var(--acc)">'+pos+'º</span>':'')+'</div></button>';};
+      +(ch.online?'<span style="background:var(--acc);color:#101317;border-radius:6px;padding:1px 7px;font:700 var(--f-micro) var(--fc);letter-spacing:.12em">ONLINE</span>':'<span style="border:1px solid var(--ctl);color:var(--t3);border-radius:6px;padding:1px 7px;font:700 var(--f-micro) var(--fc);letter-spacing:.12em">LOCAL</span>')
+      +(chalFechado(ch)?'<span style="border:1px solid var(--bad-bd);color:var(--bad);border-radius:6px;padding:1px 7px;font:700 var(--f-micro) var(--fc);letter-spacing:.12em">ENCERRADO</span>':'')+'</div>'
+      +'<div class="sub" style="font-size:var(--f-aux);padding-top:3px">'+esc(d?d.name:(ch.drillName||"drill removido"))+' · '+fnum(ch.dist)+' m · '+metricLabel(ch.metric)+'</div></div></div>'
+      +'<div class="split" style="padding-top:9px"><div class="sub" style="font-size:var(--f-aux)">'+plural(n,"atirador","atiradores")+(dl!=null?(dl>0?" · encerra em "+plural(dl,"dia","dias"):" · encerrado"):"")+'</div>'+(pos?'<span class="mono" style="font-weight:700;color:var(--acc)">'+pos+'º</span>':'')+'</div></button>';};
   return '<div class="scr">'+hdr(B.menu,"Desafios",'<button class="hb" data-a="newChal" aria-label="Criar desafio">+</button>')
     +statusBar()
     +'<div class="body cols2" style="gap:10px">'
-    +(DB.outbox.length?'<div class="card" style="border-color:var(--acc)"><div style="font:600 15px var(--fb)">'+plural(DB.outbox.length,"resultado aguardando envio","resultados aguardando envio")+'</div><div class="sub">Sobem sozinhos quando a conexão voltar.</div></div>':'')
-    +(list.length?list.map(card).join(""):'<div class="empty"><div style="font:600 18px var(--fb);color:var(--t1);padding-bottom:6px">Nenhum desafio ainda</div>Crie um e chame a galera, ou entre com o código de alguém.</div>')
-    +'<button class="card click split" data-a="pubList" style="padding:14px;border-color:var(--acc)"><div><div style="font:600 16px var(--fb)">Desafios públicos</div><div class="sub" style="font-size:12.5px">entre num desafio aberto, sem precisar conhecer ninguém</div></div><span style="color:var(--acc)">'+ic("chevron",16)+'</span></button>'
+    +(DB.outbox.length?'<div class="card" style="border-color:var(--acc)"><div style="font:600 var(--f-forte) var(--fb)">'+plural(DB.outbox.length,"resultado aguardando envio","resultados aguardando envio")+'</div><div class="sub">Sobem sozinhos quando a conexão voltar.</div></div>':'')
+    +(list.length?list.map(card).join(""):'<div class="empty"><div style="font:600 var(--f-n1) var(--fb);color:var(--t1);padding-bottom:6px">Nenhum desafio ainda</div>Crie um e chame a galera, ou entre com o código de alguém.</div>')
+    +'<button class="card click split" data-a="pubList" style="padding:14px;border-color:var(--acc)"><div><div style="font:600 var(--f-ttl) var(--fb)">Desafios públicos</div><div class="sub" style="font-size:var(--f-aux)">entre num desafio aberto, sem precisar conhecer ninguém</div></div><span style="color:var(--acc)">'+ic("chevron",16)+'</span></button>'
     +'<button class="dash" data-a="go" data-v="code">Entrar com código</button></div>'
     +'<div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
 
 SCREENS.newChall=()=>{const n=S.nc;if(!n){S.screen="challenges";return SCREENS.challenges();}
-  const typeCard=(k,t,sub)=>'<button class="card click" data-a="ncKind" data-v="'+k+'" style="flex:1;padding:13px'+(n.kind===k?";border-color:var(--acc);background:var(--acc-bg)":"")+'"><div style="font:600 16px var(--fb)">'+t+'</div><div class="sub" style="font-size:12.5px">'+sub+'</div></button>';
+  const typeCard=(k,t,sub)=>'<button class="card click" data-a="ncKind" data-v="'+k+'" style="flex:1;padding:13px'+(n.kind===k?";border-color:var(--acc);background:var(--acc-bg)":"")+'"><div style="font:600 var(--f-ttl) var(--fb)">'+t+'</div><div class="sub" style="font-size:var(--f-aux)">'+sub+'</div></button>';
   return '<div class="scr">'+hdr(B.back("challenges","Voltar aos desafios"),"Criar desafio",B.home)
     +'<div class="body">'
     +'<div style="display:flex;flex-direction:column;gap:9px">'
       +'<div style="display:flex;gap:11px">'+typeCard("online","Por código","só quem recebe o código entra")+typeCard("local","Local","todos no mesmo aparelho")+'</div>'
       +typeCard("publico","Público","aparece na lista para qualquer um · quem entrar vê seu nome no ranking")+'</div>'
-    +'<label class="card" style="display:block"><div class="lbl">Nome do desafio</div><input class="inp" id="ncName" value="'+esc(n.name)+'" placeholder="ex: Terça do Bill" style="width:100%;margin-top:8px;font:500 16px var(--fb)"></label>'
+    +'<label class="card" style="display:block"><div class="lbl">Nome do desafio</div><input class="inp" id="ncName" value="'+esc(n.name)+'" placeholder="ex: Terça do Bill" style="width:100%;margin-top:8px;font:500 var(--f-ttl) var(--fb)"></label>'
     +'<div class="card"><div class="lbl">Drill</div><div style="display:flex;flex-direction:column;gap:7px;padding-top:9px;max-height:210px;overflow:auto">'
-      +DB.drills.map(d=>'<button class="card click" data-a="ncDrill" data-v="'+esc(d.id)+'" style="padding:11px 12px'+(n.drillId===d.id?";border-color:var(--acc)":"")+'"><div style="font:600 15px var(--fb)">'+esc(d.name)+'</div><div class="sub" style="font-size:12.5px">'+drillMeta(d)+'</div></button>').join("")+'</div></div>'
+      +DB.drills.map(d=>'<button class="card click" data-a="ncDrill" data-v="'+esc(d.id)+'" style="padding:11px 12px'+(n.drillId===d.id?";border-color:var(--acc)":"")+'"><div style="font:600 var(--f-forte) var(--fb)">'+esc(d.name)+'</div><div class="sub" style="font-size:var(--f-aux)">'+drillMeta(d)+'</div></button>').join("")+'</div></div>'
     +'<div class="card"><div class="lbl">Ranquear por</div><div class="g3">'+[["hf","Hit factor"],["total","Tempo"],["first","1º tiro"]].map(([k,l])=>'<button class="opt'+(n.metric===k?" on":"")+'" data-a="ncMetric" data-v="'+k+'">'+l+'</button>').join("")+'</div></div>'
     +'<div style="display:flex;gap:11px"><div class="card" style="flex:1"><div class="lbl">Distância (m)</div>'+stepper("ncDist",fnum(n.dist),"distância")+'</div><div class="card" style="flex:1"><div class="lbl">Encerra em (dias)</div>'+stepper("ncDays",n.days,"dias")+'</div></div>'
     +(n.kind==="online"?'<div class="note" style="margin:0">Só o resultado do desafio sobe. Seu treino pessoal fica no aparelho.</div>':'<div class="note" style="margin:0">No desafio local, cada atirador entra no seu perfil deste aparelho e revezam o celular.</div>')
@@ -2071,29 +2204,72 @@ SCREENS.code=()=>{const c=S.code.padEnd(6," ");
   return '<div class="scr">'+hdr(B.back("challenges","Voltar aos desafios"),"Entrar com código",B.home)
     +'<div class="ttl">Digite o código<div class="sub">6 caracteres, como o dono do desafio enviou.</div></div>'
     +'<div class="body">'
-    +'<div style="position:relative"><div style="display:flex;gap:7px">'+[0,1,2,3,4,5].map(i=>'<div style="flex:1;aspect-ratio:1;border-radius:12px;border:1.5px solid '+(i===S.code.length?"var(--acc)":"var(--ctl)")+';display:flex;align-items:center;justify-content:center;font:700 26px var(--fm);color:'+(c[i].trim()?"var(--t1)":"var(--pend)")+'">'+(c[i].trim()||"–")+'</div>').join("")+'</div>'
-      +'<input id="codeIn" value="'+esc(S.code)+'" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Código do desafio" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:16px;border:0;background:transparent"></div>'
-    +(S.codeMsg?'<div class="sub" style="font-size:13.5px;color:var(--t2)">'+esc(S.codeMsg)+'</div>':'')
-    +(S.codeFound?'<div class="card" style="border-color:var(--ok)"><div class="lbl" style="color:var(--ok)">Encontrado</div><div style="font:600 18px var(--fb);padding-top:5px">'+esc(S.codeFound.name)+'</div><div class="sub">'+esc(S.codeFound.drillName||"")+' · '+fnum(S.codeFound.dist)+' m · '+metricLabel(S.codeFound.metric)+'</div></div>':'')
+    +'<div style="position:relative"><div style="display:flex;gap:7px">'+[0,1,2,3,4,5].map(i=>'<div style="flex:1;aspect-ratio:1;border-radius:12px;border:1.5px solid '+(i===S.code.length?"var(--acc)":"var(--ctl)")+';display:flex;align-items:center;justify-content:center;font:700 var(--f-n3) var(--fm);color:'+(c[i].trim()?"var(--t1)":"var(--pend)")+'">'+(c[i].trim()||"–")+'</div>').join("")+'</div>'
+      +'<input id="codeIn" value="'+esc(S.code)+'" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Código do desafio" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:var(--f-ttl);border:0;background:transparent"></div>'
+    +(S.codeMsg?'<div class="sub" style="font-size:var(--f-base);color:var(--t2)">'+esc(S.codeMsg)+'</div>':'')
+    +(S.codeFound?'<div class="card" style="border-color:var(--ok)"><div class="lbl" style="color:var(--ok)">Encontrado</div><div style="font:600 var(--f-n1) var(--fb);padding-top:5px">'+esc(S.codeFound.name)+'</div><div class="sub">'+esc(S.codeFound.drillName||"")+' · '+fnum(S.codeFound.dist)+' m · '+metricLabel(S.codeFound.metric)+'</div></div>':'')
     +'</div><div class="foot"><button class="btn'+(S.codeFound?" p":"")+'" data-a="codeJoin">Entrar no desafio</button></div></div>';};
+
+/* ---------- editar desafio (so o dono chega aqui) ---------- */
+SCREENS.editChal=()=>{const e=S.ec;if(!e){S.screen="ranking";return SCREENS.ranking();}
+  const ch=DB.challenges.find(c=>c.id===e.id);
+  if(!ch){S.ec=null;S.screen="challenges";return SCREENS.challenges();}
+  const fechado=chalFechado(ch),trava=e.trava;
+  const linhaTrava=trava?'<div class="note" style="margin:0">Drill, distância e critério estão travados: já tem resultado registrado. Mudar agora decidiria o ranking por cima de quem já atirou. Nome e prazo você muda à vontade.</div>':'';
+  return '<div class="scr">'+hdr(B.back("ranking","Voltar ao ranking"),"Editar desafio",B.home)
+    +'<div class="body">'
+    +linhaTrava
+    +'<label class="card" style="display:block"><div class="lbl">Nome do desafio</div><input class="inp" id="ecName" value="'+esc(e.name)+'" placeholder="ex: Terça do Bill" style="width:100%;margin-top:8px"></label>'
+    +'<div class="card"><div class="split"><div><div class="lbl">Encerra em (dias)</div><div class="sub" style="padding-top:3px">'+(e.days===0?"sem prazo — fica aberto até você encerrar":"a contar de hoje")+'</div></div>'+stepper("ecDays",e.days===0?"—":e.days,"dias")+'</div></div>'
+    +'<div class="card"><div class="lbl">Drill</div>'
+      +(trava?'<div style="font:600 var(--f-forte) var(--fb);padding-top:9px">'+esc(ch.drillName||"?")+'</div>'
+        :'<div style="display:flex;flex-direction:column;gap:7px;padding-top:9px;max-height:210px;overflow:auto">'
+          +DB.drills.map(d=>'<button class="card click" data-a="ecDrill" data-v="'+esc(d.id)+'" style="padding:11px 12px'+(e.drillId===d.id?";border-color:var(--acc)":"")+'"><div style="font:600 var(--f-forte) var(--fb)">'+esc(d.name)+'</div><div class="sub" style="font-size:var(--f-aux)">'+drillMeta(d)+'</div></button>').join("")+'</div>')
+      +'</div>'
+    +'<div class="card"><div class="lbl">Ranquear por</div>'
+      +(trava?'<div style="font:600 var(--f-forte) var(--fb);padding-top:9px">'+metricLabel(ch.metric)+'</div>'
+        :'<div class="g3">'+[["hf","Hit factor"],["total","Tempo"],["first","1º tiro"]].map(([k,l])=>'<button class="opt'+(e.metric===k?" on":"")+'" data-a="ecMetric" data-v="'+k+'">'+l+'</button>').join("")+'</div>')
+      +'</div>'
+    +'<div class="card"><div class="split"><div class="lbl">Distância (m)</div>'
+      +(trava?'<div style="font:600 var(--f-forte) var(--fb)">'+fnum(ch.dist)+' m</div>':stepper("ecDist",fnum(e.dist),"distância"))
+      +'</div></div>'
+    +(ch.online?'<div class="note" style="margin:0">Mudança em desafio online precisa de conexão: os outros participantes têm que receber o novo estado. Sem isso o que você vê e o que eles veem ficariam diferentes.</div>':'')
+    +'<div class="card"><div class="lbl">'+(fechado?"Reabrir":"Encerrar")+'</div>'
+      +'<div class="sub" style="padding-top:5px">'+(fechado
+         ?'O desafio está encerrado. Reabrir volta a aceitar tentativas'+(ch.publico?" e faz ele voltar para a lista pública":"")+'.'
+         :'Encerrar congela o ranking e para de aceitar tentativas'+(ch.publico?", e tira o desafio da lista pública":"")+'. Nada é apagado, e dá para reabrir.')+'</div>'
+      +'<button class="dash" data-a="'+(fechado?"ecReopen":"ecClose")+'" style="margin-top:10px">'+(fechado?"Reabrir desafio":"Encerrar desafio")+'</button></div>'
+    +'<button class="link" data-a="chalRemove" style="color:var(--bad)">Remover da minha lista</button>'
+    +'</div><div class="foot"><button class="btn p" data-a="ecSave">Salvar alterações</button></div></div>';};
 
 /* ---------- ranking ---------- */
 SCREENS.ranking=()=>{const ch=curChal();if(!ch){S.screen="challenges";return SCREENS.challenges();}
   const d=drillById(ch.drillId);
   return '<div class="scr">'+hdr(B.back("challenges","Voltar aos desafios"),"Ranking",B.home)
-    +'<div style="padding:0 18px 12px" class="split"><div style="min-width:0"><div style="font:600 22px var(--fb)">'+esc(ch.name)+'</div><div class="sub">'+esc(d?d.name:(ch.drillName||"?"))+' · '+fnum(ch.dist)+' m · '+metricLabel(ch.metric)+'</div></div>'
-      +(ch.online?'<button class="link" data-a="copyCode" style="text-align:right;flex:none;padding:0"><span class="mono" style="font-weight:700;font-size:17px;color:var(--acc);letter-spacing:.08em">'+esc(ch.code)+'</span><br><span style="font-size:12px">copiar</span></button>':'')+'</div>'
+    +'<div style="padding:0 18px 12px" class="split"><div style="min-width:0"><div style="font:600 var(--f-n2) var(--fb)">'+esc(ch.name)+'</div><div class="sub">'+esc(d?d.name:(ch.drillName||"?"))+' · '+fnum(ch.dist)+' m · '+metricLabel(ch.metric)+'</div></div>'
+      +(ch.online?'<button class="link" data-a="copyCode" style="text-align:right;flex:none;padding:0"><span class="mono" style="font-weight:700;font-size:var(--f-ttl);color:var(--acc);letter-spacing:.08em">'+esc(ch.code)+'</span><br><span style="font-size:var(--f-aux)">copiar</span></button>':'')+'</div>'
     +'<div class="body" style="padding:0;gap:0" id="rankBox">'+rankInner(ch)+'</div>'
-    +'<div class="foot"><button class="btn" data-a="chalRemove" style="flex:none;width:60px" aria-label="Remover desafio da lista">'+ic("fechar",18)+'</button><button class="btn p" data-a="chalRun">Nova tentativa</button></div></div>';};
+    /* v10.7: o dono ganha a engrenagem (editar/encerrar) no lugar do X; quem so
+       participa continua com o X, que tira o desafio da lista DELE e nada mais.
+       Encerrado, o botao de tentativa fica inerte em vez de desaparecer — a tela
+       tem que dizer por que nao da para atirar, nao so nao oferecer. */
+    +'<div class="foot">'
+    +(souDono(ch)
+       ?'<button class="btn" data-a="editChal" style="flex:none;width:60px" aria-label="Editar desafio">'+ic("config",18)+'</button>'
+       :'<button class="btn" data-a="chalRemove" style="flex:none;width:60px" aria-label="Remover desafio da lista">'+ic("fechar",18)+'</button>')
+    +(chalFechado(ch)
+       ?'<button class="btn" disabled>Desafio encerrado</button>'
+       :'<button class="btn p" data-a="chalRun">Nova tentativa</button>')
+    +'</div></div>';};
 function rankInner(ch){const rows=rowsFor(ch),live=ch.online?(S.rankLive?'<span style="color:var(--ok)">ao vivo</span>':'<span style="color:var(--bad)">offline</span>'):'<span style="color:var(--t3)">neste aparelho</span>';
   const top=rows.slice(0,3),order=[1,0,2],hs=[62,92,44];
   const podium=rows.length?'<div style="display:flex;align-items:flex-end;gap:9px;padding:0 18px 14px">'+order.map((idx,i)=>{const r=top[idx];if(!r)return '<div style="flex:1"></div>';
-      return '<div style="flex:1;text-align:center"><div class="sub" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name||"Anônimo")+'</div>'
-        +'<div style="height:'+hs[i]+'px;border-radius:12px 12px 0 0;margin-top:6px;display:flex;align-items:flex-start;justify-content:center;padding-top:8px;font:700 18px var(--fm);background:'+(r.me?"var(--acc)":"var(--surf)")+';border:1px solid '+(r.me?"var(--acc)":"var(--bd)")+';color:'+(r.me?"#101317":"var(--t2)")+'">'+(idx+1)+'º</div></div>';}).join("")+'</div>':'';
-  const banner=(ch.online&&S.rankOffline)?'<div style="margin:0 18px 12px;background:var(--bad-bg);border:1px solid var(--bad-bd);border-radius:12px;padding:11px 13px" class="split"><div><div style="font:600 14px var(--fb);color:var(--bad)">Sem conexão</div><div class="sub" style="font-size:12.5px">'+(ch.lastAt?"mostrando o ranking salvo às "+new Date(ch.lastAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}):"nenhum ranking salvo ainda")+'</div></div><button class="link" data-a="rankRetry" style="padding:0">tentar</button></div>':'';
+      return '<div style="flex:1;text-align:center"><div class="sub" style="font-size:var(--f-aux);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name||"Anônimo")+'</div>'
+        +'<div style="height:'+hs[i]+'px;border-radius:12px 12px 0 0;margin-top:6px;display:flex;align-items:flex-start;justify-content:center;padding-top:8px;font:700 var(--f-n1) var(--fm);background:'+(r.me?"var(--acc)":"var(--surf)")+';border:1px solid '+(r.me?"var(--acc)":"var(--bd)")+';color:'+(r.me?"#101317":"var(--t2)")+'">'+(idx+1)+'º</div></div>';}).join("")+'</div>':'';
+  const banner=(ch.online&&S.rankOffline)?'<div style="margin:0 18px 12px;background:var(--bad-bg);border:1px solid var(--bad-bd);border-radius:12px;padding:11px 13px" class="split"><div><div style="font:600 var(--f-base) var(--fb);color:var(--bad)">Sem conexão</div><div class="sub" style="font-size:var(--f-aux)">'+(ch.lastAt?"mostrando o ranking salvo às "+new Date(ch.lastAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}):"nenhum ranking salvo ainda")+'</div></div><button class="link" data-a="rankRetry" style="padding:0">tentar</button></div>':'';
   const pres=S.rankPres?'<div class="sub" style="padding:0 18px 10px;color:var(--bad)">● '+esc(S.rankPres)+'</div>':'';
-  return banner+podium+pres+'<div class="split" style="padding:0 18px 9px"><div class="lbl">Classificação</div><div style="font:700 11px var(--fc);letter-spacing:.14em;text-transform:uppercase">'+live+'</div></div>'
-    +(rows.length?'<div style="padding:0 18px 12px;display:flex;flex-direction:column;gap:8px">'+rows.map((r,i)=>'<div class="card split" style="padding:11px 13px'+(r.me?";border-color:var(--acc);background:var(--acc-bg)":"")+'"><div style="display:flex;gap:11px;align-items:center;min-width:0"><span class="mono" style="font-weight:700;width:26px;color:'+(i<3?"var(--acc)":"var(--t3)")+'">'+(i+1)+'º</span><div style="min-width:0"><div style="font:600 15px var(--fb)">'+esc(r.name||"Anônimo")+'</div><div class="sub" style="font-size:12.5px">'+fmt(+r.total||0,2)+' s'+(r.acc!=null?' · '+(+r.acc||0)+'%':'')+'</div></div></div><span class="mono" style="font-weight:700;font-size:17px;color:var(--acc)">'+fmt(+r.hf||0,2)+'</span></div>').join("")+'</div>'
+  return banner+podium+pres+'<div class="split" style="padding:0 18px 9px"><div class="lbl">Classificação</div><div style="font:700 var(--f-rot) var(--fc);letter-spacing:.14em;text-transform:uppercase">'+live+'</div></div>'
+    +(rows.length?'<div style="padding:0 18px 12px;display:flex;flex-direction:column;gap:8px">'+rows.map((r,i)=>'<div class="card split" style="padding:11px 13px'+(r.me?";border-color:var(--acc);background:var(--acc-bg)":"")+'"><div style="display:flex;gap:11px;align-items:center;min-width:0"><span class="mono" style="font-weight:700;width:26px;color:'+(i<3?"var(--acc)":"var(--t3)")+'">'+(i+1)+'º</span><div style="min-width:0"><div style="font:600 var(--f-forte) var(--fb)">'+esc(r.name||"Anônimo")+'</div><div class="sub" style="font-size:var(--f-aux)">'+fmt(+r.total||0,2)+' s'+(r.acc!=null?' · '+(+r.acc||0)+'%':'')+'</div></div></div><span class="mono" style="font-weight:700;font-size:var(--f-ttl);color:var(--acc)">'+fmt(+r.hf||0,2)+'</span></div>').join("")+'</div>'
       :'<div class="empty" style="margin:0 18px">Sem resultados ainda. Seja o primeiro.</div>');}
 function paintRanking(){const ch=curChal(),box=$("#rankBox");if(ch&&box)box.innerHTML=rankInner(ch);}
 /* liga os listeners em tempo real (resultados + presença) e guarda o último ranking para o modo offline */
@@ -2119,6 +2295,7 @@ function needName(){
 
 document.addEventListener("input",e=>{const el=e.target;if(!el)return;
   if(el.id==="ncName"&&S.nc)S.nc.name=el.value;
+  else if(el.id==="ecName"&&S.ec)S.ec.name=el.value;
   else if(el.id==="codeIn"){const v=el.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6);S.code=v;S.codeFound=null;S.codeMsg="";render();const i=$("#codeIn");if(i){i.focus();}if(v.length===6)lookupCode(v);}
   else if(el.id==="pfName"){const p=DB.profiles.find(x=>x.id===DB.currentProfile);if(p){p.name=el.value;save();
     /* v10.4: avisa já na digitação, mas nao impede de salvar no aparelho — o
@@ -2140,7 +2317,8 @@ async function carregaPublicos(){
       .orderBy("createdAt","desc").limit(40).get();
     const agora=Date.now(),out=[];
     sn.forEach(d=>{const c=Object.assign({code:d.id},d.data());
-      if(c.endsAt&&c.endsAt<agora)return;            /* encerrado não aparece na lista */
+      if(c.endsAt&&c.endsAt<agora)return;            /* prazo vencido não aparece */
+      if(c.encerrado)return;                         /* v10.7: encerrado pelo dono também sai */
       out.push(c);});
     /* Quem está na frente vem da subcoleção de resultados, lido na hora. Guardar
        topName no próprio desafio exigiria deixar qualquer um escrever nesse campo,
@@ -2163,16 +2341,16 @@ SCREENS.publicos=()=>{
   const l=S.pubList;
   const card=c=>'<button class="card click" data-a="pubJoin" data-v="'+esc(c.code)+'" style="padding:14px">'
     +'<div class="split" style="align-items:flex-start"><div style="min-width:0">'
-      +'<div style="font:600 17px var(--fb);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.name||"Desafio")+'</div>'
-      +'<div class="sub" style="font-size:13px;padding-top:3px">'+esc(c.drillName||"drill")+' · '+fnum(c.dist)+' m · '+metricLabel(c.metric)+'</div>'
+      +'<div style="font:600 var(--f-ttl) var(--fb);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.name||"Desafio")+'</div>'
+      +'<div class="sub" style="font-size:var(--f-aux);padding-top:3px">'+esc(c.drillName||"drill")+' · '+fnum(c.dist)+' m · '+metricLabel(c.metric)+'</div>'
     +'</div><span style="color:var(--t3);flex:none">'+ic("chevron",16)+'</span></div>'
     +'<div class="split" style="padding-top:10px;border-top:1px solid var(--track);margin-top:10px">'
-      +'<span class="sub" style="font-size:12.5px">'+(c.endsAt?"encerra em "+plural(Math.max(0,Math.ceil((c.endsAt-Date.now())/864e5)),"dia","dias"):"sem prazo")+'</span>'
-      +(c.topName?'<span class="sub" style="font-size:12.5px;color:var(--acc);max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">1º '+esc(c.topName)+(c.topVal!=null?" · "+fmt(+c.topVal,2):"")+'</span>':'<span class="sub" style="font-size:12.5px">seja o primeiro</span>')
+      +'<span class="sub" style="font-size:var(--f-aux)">'+(c.endsAt?"encerra em "+plural(Math.max(0,Math.ceil((c.endsAt-Date.now())/864e5)),"dia","dias"):"sem prazo")+'</span>'
+      +(c.topName?'<span class="sub" style="font-size:var(--f-aux);color:var(--acc);max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">1º '+esc(c.topName)+(c.topVal!=null?" · "+fmt(+c.topVal,2):"")+'</span>':'<span class="sub" style="font-size:var(--f-aux)">seja o primeiro</span>')
     +'</div></button>';
   return '<div class="scr">'+hdr(B.back("challenges","Voltar aos desafios"),"Desafios públicos",B.home)
     +'<div class="body">'
-    +'<div class="sub" style="font-size:13.5px;color:var(--t2);line-height:1.5">Qualquer um pode entrar. Ao enviar seu resultado, <b>seu nome aparece no ranking</b> para quem abrir este desafio.</div>'
+    +'<div class="sub" style="font-size:var(--f-base);color:var(--t2);line-height:1.5">Qualquer um pode entrar. Ao enviar seu resultado, <b>seu nome aparece no ranking</b> para quem abrir este desafio.</div>'
     +(S.pubMsg?'<div class="empty">'+esc(S.pubMsg)+'</div>':'')
     +(l&&l.length?l.map(card).join(""):'')
     +'</div><div class="foot"><button class="btn" data-a="pubReload">Atualizar</button><button class="btn p x" data-a="newChal">Criar desafio</button></div></div>';};
@@ -2187,6 +2365,78 @@ async function lookupCode(code){S.codeMsg="Procurando…";render();
 
 Object.assign(ACT,{
   newChal:()=>{S.nc={kind:"online",name:"",drillId:S.selId||(DB.drills[0]||{}).id,metric:"hf",dist:7,days:7};go("newChall");},
+  /* --------------------------------------------------------------------------
+     v10.7 — acoes de editar/encerrar. Duas regras valem para todas elas:
+
+     (a) SERVIDOR PRIMEIRO, APARELHO DEPOIS. Se a escrita no Firestore falhar, o
+         estado local nao muda. O contrario deixaria o dono vendo uma coisa e os
+         participantes outra, sem nada na tela dizendo isso.
+     (b) Desafio ONLINE exige conexao para mudar. Nao ha fila de alteracao: uma
+         fila faria o dono achar que mudou enquanto os outros ainda jogam pelo
+         estado antigo. Melhor recusar na hora e dizer por que.
+     -------------------------------------------------------------------------- */
+  editChal:()=>{const ch=curChal();if(!ch)return;
+    if(!souDono(ch)){toast("Só o dono edita o desafio");return;}
+    const dias=ch.endsAt?Math.max(0,daysLeft(ch)):0;
+    S.ec={id:ch.id,name:ch.name||"",days:dias,days0:dias,drillId:ch.drillId,
+          metric:ch.metric||"hf",dist:ch.dist,trava:chalTemResultado(ch)};
+    go("editChal");},
+  ecDrill:v=>{if(!S.ec)return;S.ec.drillId=v;const d=drillById(v);if(d)S.ec.dist=d.dist||S.ec.dist;render();},
+  ecMetric:v=>{if(!S.ec)return;S.ec.metric=v;render();},
+  ecDist:v=>{if(!S.ec)return;S.ec.dist=Math.max(1,Math.min(50,Math.round(S.ec.dist)+(+v)));render();},
+  /* 0 = sem prazo. O desafio fica aberto ate o dono encerrar a mao. */
+  ecDays:v=>{if(!S.ec)return;S.ec.days=Math.max(0,Math.min(365,S.ec.days+(+v)));render();},
+  ecSave:async()=>{const e=S.ec;if(!e)return;
+    const ch=DB.challenges.find(c=>c.id===e.id);if(!ch){S.ec=null;go("challenges");return;}
+    const name=(e.name||"").trim();
+    if(!name){toast("Dê um nome ao desafio");return;}
+    {const err=validaTexto(name,"Nome do desafio",40);if(err){toast(err);return;}}
+    const mudouTravavel=!e.trava&&(e.drillId!==ch.drillId||e.metric!==(ch.metric||"hf")||+e.dist!==+ch.dist);
+    /* A trava foi decidida quando a tela abriu, com o que o aparelho sabia. Se o
+       dono mexeu num campo travavel, confirma no servidor antes de gravar — senao
+       a trava seria decorativa justamente no caso que importa (resultado que
+       existe mas que este aparelho nunca viu). */
+    if(mudouTravavel){
+      const n=await contaResultados(ch);
+      if(n<0){toast("Sem conexão — não deu para confirmar se já tem resultado");return;}
+      if(n>0){S.ec.trava=true;render();toast("Já tem resultado: drill, distância e critério travaram");return;}}
+    const d=drillById(e.drillId);
+    if(!e.trava&&!d){toast("Escolha um drill");return;}
+    /* O prazo so e recalculado se o dono realmente mexeu no stepper. Recalcular
+       sempre empurraria a data para frente a cada salvamento, porque daysLeft()
+       arredonda para cima. */
+    const prazoMudou=e.days!==e.days0;
+    const endsAt=prazoMudou?(e.days===0?null:Date.now()+e.days*864e5):(ch.endsAt||null);
+    const campos={name};
+    if(prazoMudou)campos.endsAt=endsAt;
+    if(!e.trava&&d){campos.drillId=d.id;campos.drillName=d.name;campos.metric=e.metric;campos.dist=e.dist;
+      campos.drillSnap={name:d.name,shots:d.shots,par:d.par,pen:d.pen||0,dist:d.dist,target:d.target||""};}
+    if(ch.online){
+      toast("Salvando…");
+      if(!await ensureOnline()){toast("Sem conexão — mudar desafio online precisa de conexão");return;}
+      try{await fb.db.collection("challenges").doc(ch.code).update(campos);}
+      catch(err){logErr("desafio",err&&err.message||err,"ecSave");toast("Não deu para salvar no servidor — nada foi alterado");return;}}
+    Object.assign(ch,campos);save();S.ec=null;go("ranking");toast("Desafio atualizado");},
+  ecClose:()=>{const e=S.ec;const ch=e&&DB.challenges.find(c=>c.id===e.id);if(!ch)return;
+    ask("Encerrar desafio?",(ch.publico?"Ele sai da lista pública e ":"")+"para de aceitar tentativas. O ranking continua visível, nada é apagado, e dá para reabrir depois.","Encerrar",async()=>{
+      if(ch.online){
+        if(!await ensureOnline()){toast("Sem conexão — não deu para encerrar");return;}
+        try{await fb.db.collection("challenges").doc(ch.code).update({encerrado:true,encerradoAt:Date.now()});}
+        catch(err){logErr("desafio",err&&err.message||err,"ecClose");toast("Não deu para encerrar no servidor");return;}}
+      ch.encerrado=true;ch.encerradoAt=Date.now();save();render();toast("Desafio encerrado");},true);},
+  ecReopen:()=>{const e=S.ec;const ch=e&&DB.challenges.find(c=>c.id===e.id);if(!ch)return;
+    /* Reabrir tem que tirar o prazo vencido junto. Senao chalFechado() continuaria
+       verdadeiro pelo prazo e o botao pareceria nao fazer nada. */
+    const venceu=(()=>{const dl=daysLeft(ch);return dl!=null&&dl<=0;})();
+    const campos={encerrado:false};if(venceu)campos.endsAt=null;
+    (async()=>{
+      if(ch.online){
+        if(!await ensureOnline()){toast("Sem conexão — não deu para reabrir");return;}
+        try{await fb.db.collection("challenges").doc(ch.code).update(campos);}
+        catch(err){logErr("desafio",err&&err.message||err,"ecReopen");toast("Não deu para reabrir no servidor");return;}}
+      Object.assign(ch,campos);save();
+      if(S.ec){S.ec.days=0;S.ec.days0=0;}
+      render();toast(venceu?"Desafio reaberto, sem prazo — defina um se quiser":"Desafio reaberto");})();},
   ncKind:v=>{S.nc.kind=v;render();},
   ncDrill:v=>{S.nc.drillId=v;const d=drillById(v);if(d)S.nc.dist=d.dist||S.nc.dist;render();},
   ncMetric:v=>{S.nc.metric=v;render();},
@@ -2213,7 +2463,9 @@ Object.assign(ACT,{
     if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>toast("Código "+t+" copiado")).catch(()=>toast("Código: "+t));else toast("Código: "+t);},
   rankRetry:()=>{attachRanking();toast("Tentando de novo…");},
   chalRun:()=>{const ch=curChal();if(!ch)return;if(ch.online&&!needName())return;
-    const dl=daysLeft(ch);if(dl!=null&&dl<=0){toast("Esse desafio já encerrou");return;}startTraining(ch);},
+    /* v10.7: uma porta so para prazo vencido e para encerrado pelo dono */
+    if(chalFechado(ch)){toast(ch.encerrado?"O dono encerrou esse desafio":"Esse desafio já encerrou");return;}
+    startTraining(ch);},
   chalRemove:()=>{const ch=curChal();if(!ch)return;ask("Remover da lista?",ch.online?"O desafio continua no ar para os outros; ele some só deste aparelho. Dá para voltar com o código "+ch.code+".":"O desafio sai deste aparelho. As sessões já salvas continuam no histórico.","Remover",()=>{DB.challenges=DB.challenges.filter(c=>c.id!==ch.id);save();go("challenges");toast("Desafio removido");},true);},
   pubList:()=>{go("publicos");carregaPublicos();},
   pubReload:()=>carregaPublicos(),
@@ -2237,21 +2489,21 @@ SCREENS.profile=()=>{ensureGear();const p=DB.profiles.find(x=>x.id===DB.currentP
   const mine=DB.sessions.filter(x=>x.profileId===DB.currentProfile),sc=mine.filter(isScored);
   const bHf=sc.length?Math.max(...sc.map(x=>x.hf)):null,bF=(()=>{const f=mine.map(x=>x.first).filter(x=>x>0);return f.length?Math.min(...f):null;})();
   const first=mine.length?new Date(Math.min(...mine.map(x=>new Date(x.date).getTime()))):null;
-  const field=(id,label,val,ph)=>'<label class="card" style="display:block"><div class="lbl">'+label+'</div><input class="inp" id="'+id+'" value="'+esc(val||"")+'" placeholder="'+ph+'" style="width:100%;margin-top:8px;border:1px solid var(--ctl);font:400 15px var(--fb)"></label>';
+  const field=(id,label,val,ph)=>'<label class="card" style="display:block"><div class="lbl">'+label+'</div><input class="inp" id="'+id+'" value="'+esc(val||"")+'" placeholder="'+ph+'" style="width:100%;margin-top:8px;border:1px solid var(--ctl);font:400 var(--f-ttl) var(--fb)"></label>';
   return '<div class="scr">'+hdr(B.menu,"Perfil",B.home)
-    +'<div style="padding:0 18px 14px;display:flex;gap:14px;align-items:center"><div style="width:62px;height:62px;border-radius:18px;border:1.5px solid var(--acc);color:var(--acc);display:flex;align-items:center;justify-content:center;font:700 20px var(--fc);letter-spacing:.06em">'+initials()+'</div>'
-      +'<div style="min-width:0"><div style="font:600 21px var(--fb)">'+esc(userName()||"Sem nome")+'</div><div class="sub">'+plural(mine.length,"sessão salva","sessões salvas")+(first?" · desde "+dshort(first):"")+'</div></div></div>'
+    +'<div style="padding:0 18px 14px;display:flex;gap:14px;align-items:center"><div style="width:62px;height:62px;border-radius:18px;border:1.5px solid var(--acc);color:var(--acc);display:flex;align-items:center;justify-content:center;font:700 var(--f-n1) var(--fc);letter-spacing:.06em">'+initials()+'</div>'
+      +'<div style="min-width:0"><div style="font:600 var(--f-n1) var(--fb)">'+esc(userName()||"Sem nome")+'</div><div class="sub">'+plural(mine.length,"sessão salva","sessões salvas")+(first?" · desde "+dshort(first):"")+'</div></div></div>'
     +'<div class="body">'
     +field("pfName","Nome",p.name==="Eu"?"":p.name,"como aparece no ranking")
     +field("pfClub","Clube / stand",p.clube,"onde você treina")
     +field("pfGunModel","Arma principal (modelo)",p.model,"ex: Glock 19 Gen5")
-    +'<div class="card"><div class="split"><div class="lbl">Tipo de arma padrão</div><div class="sub" style="font-size:12px">já vem escolhido no treino</div></div><div class="g3">'+GUNS.map(g=>'<button class="opt'+(s.gun===g?" on":"")+'" data-a="gun" data-v="'+g+'">'+g+'</button>').join("")+'</div></div>'
+    +'<div class="card"><div class="split"><div class="lbl">Tipo de arma padrão</div><div class="sub" style="font-size:var(--f-aux)">já vem escolhido no treino</div></div><div class="g3">'+GUNS.map(g=>'<button class="opt'+(s.gun===g?" on":"")+'" data-a="gun" data-v="'+g+'">'+g+'</button>').join("")+'</div></div>'
     +'<div class="card"><div class="lbl">Calibre padrão</div><div class="g3">'+calsFor(s.gun).map(c=>'<button class="opt m'+(s.cal===c?" on":"")+'" data-a="cal" data-v="'+esc(c)+'">'+esc(c)+'</button>').join("")+'</div></div>'
     +'<div class="card"><div class="lbl">Mão dominante</div><div class="g3">'+["Direita","Esquerda","Ambas"].map(h=>'<button class="opt'+((p.hand||"Direita")===h?" on":"")+'" data-a="pfHand" data-v="'+h+'">'+h+'</button>').join("")+'</div></div>'
     +'<div class="card"><div class="lbl">Recordes</div><div style="display:flex;gap:9px;padding-top:10px">'+kpi(bHf!=null?fmt(bHf,2):dash,"Melhor HF",true)+kpi(bF!=null?fmt(bF,2):dash,"Melhor 1º tiro")+kpi(mine.length,"Sessões")+'</div></div>'
     +'<div class="card"><div class="lbl">Atiradores neste aparelho</div><div style="display:flex;flex-direction:column;gap:7px;padding-top:9px">'
-      +DB.profiles.map(x=>'<button class="card click split" data-a="pfSwitch" data-v="'+esc(x.id)+'" style="padding:11px 12px'+(x.id===DB.currentProfile?";border-color:var(--acc)":"")+'"><span style="font:600 15px var(--fb)">'+esc(x.name)+'</span>'+(x.id===DB.currentProfile?'<span style="color:var(--acc);font-weight:700">✓</span>':'<span class="sub" style="font-size:12.5px">trocar</span>')+'</button>').join("")
-      +'<button class="dash" data-a="pfNew">+ Novo atirador</button></div><div class="sub" style="font-size:12px;padding-top:8px">Serve para desafios locais: cada um entra no seu perfil e revezam o celular.</div></div>'
+      +DB.profiles.map(x=>'<button class="card click split" data-a="pfSwitch" data-v="'+esc(x.id)+'" style="padding:11px 12px'+(x.id===DB.currentProfile?";border-color:var(--acc)":"")+'"><span style="font:600 var(--f-forte) var(--fb)">'+esc(x.name)+'</span>'+(x.id===DB.currentProfile?'<span style="color:var(--acc);font-weight:700">✓</span>':'<span class="sub" style="font-size:var(--f-aux)">trocar</span>')+'</button>').join("")
+      +'<button class="dash" data-a="pfNew">+ Novo atirador</button></div><div class="sub" style="font-size:var(--f-aux);padding-top:8px">Serve para desafios locais: cada um entra no seu perfil e revezam o celular.</div></div>'
     +'<button class="link" data-a="go" data-v="settings">Configurações do app</button>'
     +'</div><div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
 Object.assign(ACT,{
@@ -2269,12 +2521,12 @@ Object.assign(ACT,{
 SCREENS.errlog=()=>{const es=readErrs().slice().reverse();
   return '<div class="scr">'+hdr(B.back("settings","Voltar"),"Registro de erros",B.home)
     +'<div class="body">'
-    +'<div class="sub" style="font-size:14px;color:var(--t2);line-height:1.5">Os 20 erros mais recentes neste aparelho. Nada sai daqui: serve para você copiar e mandar quando algo falhar no treino.</div>'
+    +'<div class="sub" style="font-size:var(--f-base);color:var(--t2);line-height:1.5">Os 20 erros mais recentes neste aparelho. Nada sai daqui: serve para você copiar e mandar quando algo falhar no treino.</div>'
     +(es.length
-      ? es.map(e=>'<div class="card" style="padding:11px 13px"><div class="split"><span class="lbl" style="color:var(--acc)">'+esc(e.tipo)+'</span><span class="sub" style="font-size:12px">'+new Date(e.at).toLocaleString("pt-BR")+'</span></div>'
-          +'<div style="font:400 13px var(--fm);color:var(--t1);padding-top:6px;word-break:break-word">'+esc(e.msg)+'</div>'
-          +'<div class="sub" style="font-size:12px;padding-top:4px">tela: '+esc(e.tela||"?")+(e.onde?' · '+esc(e.onde):'')+'</div></div>').join("")
-      : '<div class="empty"><div style="font:600 18px var(--fb);color:var(--t1);padding-bottom:6px">Nenhum erro registrado</div>É o que a gente quer. Se algo falhar, aparece aqui sozinho.</div>')
+      ? es.map(e=>'<div class="card" style="padding:11px 13px"><div class="split"><span class="lbl" style="color:var(--acc)">'+esc(e.tipo)+'</span><span class="sub" style="font-size:var(--f-aux)">'+new Date(e.at).toLocaleString("pt-BR")+'</span></div>'
+          +'<div style="font:400 var(--f-aux) var(--fm);color:var(--t1);padding-top:6px;word-break:break-word">'+esc(e.msg)+'</div>'
+          +'<div class="sub" style="font-size:var(--f-aux);padding-top:4px">tela: '+esc(e.tela||"?")+(e.onde?' · '+esc(e.onde):'')+'</div></div>').join("")
+      : '<div class="empty"><div style="font:600 var(--f-n1) var(--fb);color:var(--t1);padding-bottom:6px">Nenhum erro registrado</div>É o que a gente quer. Se algo falhar, aparece aqui sozinho.</div>')
     +'</div><div class="foot">'
     +(es.length?'<button class="btn" data-a="errClear">Limpar</button><button class="btn p x" data-a="errCopy">Copiar tudo</button>'
                :'<button class="btn p x" data-a="go" data-v="settings">Voltar</button>')
@@ -2294,12 +2546,12 @@ SCREENS.settings=()=>{const s=DB.settings,late=backupLate(),dexp=daysSinceExport
   /* v10 C4: dados do cartão Microfone — nome do preset em uso e estado da permissão */
   const cpk=curPreset(),cpObj=MIC_PRESETS.find(x=>x.k===cpk),pi=micPermInfo();
   const nerr=readErrs().length;   /* v10.1 F4 */
-  const rowTg=(act,label,sub,on)=>'<button class="split" data-a="'+act+'" role="switch" aria-checked="'+!!on+'" style="width:100%;background:none;border:0;border-top:1px solid var(--track);padding:13px 0;text-align:left;cursor:pointer"><div><div style="font:500 15px var(--fb);color:var(--t1)">'+label+'</div>'+(sub?'<div class="sub" style="font-size:12.5px">'+sub+'</div>':'')+'</div><span class="tg'+(on?" on":"")+'"><i></i></span></button>';
+  const rowTg=(act,label,sub,on)=>'<button class="split" data-a="'+act+'" role="switch" aria-checked="'+!!on+'" style="width:100%;background:none;border:0;border-top:1px solid var(--track);padding:13px 0;text-align:left;cursor:pointer"><div><div style="font:500 var(--f-forte) var(--fb);color:var(--t1)">'+label+'</div>'+(sub?'<div class="sub" style="font-size:var(--f-aux)">'+sub+'</div>':'')+'</div><span class="tg'+(on?" on":"")+'"><i></i></span></button>';
   return '<div class="scr">'+hdr(B.menu,"Config",B.home)
     +'<div class="body">'
     +'<div class="card"><div class="lbl">Largada</div>'
-      +'<div style="display:flex;gap:11px;padding-top:10px"><div style="flex:1"><div class="sub" style="font-size:12.5px">Atraso mínimo</div>'+stepper("dmin",fmt(s.dlyMin,1)+"s","atraso mínimo")+'</div><div style="flex:1"><div class="sub" style="font-size:12.5px">Atraso máximo</div>'+stepper("dmax",fmt(s.dlyMax,1)+"s","atraso máximo")+'</div></div>'
-      +'<div style="padding-top:12px"><div class="sub" style="font-size:12.5px;padding-bottom:7px">Volume do beep</div><div class="g3" style="padding-top:0">'+[["baixo","Baixo"],["medio","Médio"],["alto","Alto"]].map(([k,l])=>'<button class="opt'+(s.beepVol===k?" on":"")+'" data-a="vol" data-v="'+k+'">'+l+'</button>').join("")+'</div></div>'
+      +'<div style="display:flex;gap:11px;padding-top:10px"><div style="flex:1"><div class="sub" style="font-size:var(--f-aux)">Atraso mínimo</div>'+stepper("dmin",fmt(s.dlyMin,1)+"s","atraso mínimo")+'</div><div style="flex:1"><div class="sub" style="font-size:var(--f-aux)">Atraso máximo</div>'+stepper("dmax",fmt(s.dlyMax,1)+"s","atraso máximo")+'</div></div>'
+      +'<div style="padding-top:12px"><div class="sub" style="font-size:var(--f-aux);padding-bottom:7px">Volume do beep</div><div class="g3" style="padding-top:0">'+[["baixo","Baixo"],["medio","Médio"],["alto","Alto"]].map(([k,l])=>'<button class="opt'+(s.beepVol===k?" on":"")+'" data-a="vol" data-v="'+k+'">'+l+'</button>').join("")+'</div></div>'
       +rowTg("tgVib","Vibração","",s.vibrate)+rowTg("tgFlash","Piscar a tela","sinal visual para quem usa protetor",s.flash)+rowTg("tgFlash2","Piscar duas vezes","",s.flashDouble)
       +rowTg("tgPar","Beep no fim do tempo-alvo","avisa quando o par time acaba",s.parBeep)+rowTg("tgWake","Manter a tela ligada","",s.wake)+'</div>'
     /* v10 C4 — o “Ajuste de captação” era uma linha discreta aqui dentro, do
@@ -2308,19 +2560,19 @@ SCREENS.settings=()=>{const s=DB.settings,late=backupLate(),dexp=daysSinceExport
        permissão do microfone — que antes não aparecia em lugar nenhum da Config. */
     +'<div class="card"><div class="lbl">Microfone</div>'
       +'<div style="display:flex;flex-direction:column;gap:8px;padding-top:10px">'
-        +'<button class="card click split" data-a="go" data-v="mic" style="padding:13px;border-color:var(--acc);background:var(--acc-bg)"><div style="display:flex;gap:12px;align-items:center;min-width:0">'+ic("niveis",21)+'<div style="min-width:0"><div style="font:600 16px var(--fb)">Ajuste de captação</div><div class="sub" style="font-size:12.5px">'+(cpObj?esc(cpObj.l)+' · ':'')+'margem '+Math.round(marginDb(s.sens))+' dB · anti-eco '+(s.echoBlank||150)+' ms'+(s.requireClip?' · impacto forte':'')+'</div></div></div><span style="color:var(--acc);font-weight:700">›</span></button>'
-        +'<button class="card click split" data-a="go" data-v="micperm" style="padding:13px"><div style="display:flex;gap:12px;align-items:center;min-width:0">'+ic("microfone",21)+'<div style="min-width:0"><div style="font:600 16px var(--fb)">Permissão do microfone</div><div class="sub" style="font-size:12.5px;color:'+pi.col+'">'+pi.txt+(pi.st==="denied"?' · ver como liberar':'')+'</div></div></div><span style="color:var(--t3)">›</span></button>'
+        +'<button class="card click split" data-a="go" data-v="mic" style="padding:13px;border-color:var(--acc);background:var(--acc-bg)"><div style="display:flex;gap:12px;align-items:center;min-width:0">'+ic("niveis",21)+'<div style="min-width:0"><div style="font:600 var(--f-ttl) var(--fb)">Ajuste de captação</div><div class="sub" style="font-size:var(--f-aux)">'+(cpObj?esc(cpObj.l)+' · ':'')+'margem '+Math.round(marginDb(s.sens))+' dB · anti-eco '+(s.echoBlank||150)+' ms'+(s.requireClip?' · impacto forte':'')+'</div></div></div><span style="color:var(--acc);font-weight:700">›</span></button>'
+        +'<button class="card click split" data-a="go" data-v="micperm" style="padding:13px"><div style="display:flex;gap:12px;align-items:center;min-width:0">'+ic("microfone",21)+'<div style="min-width:0"><div style="font:600 var(--f-ttl) var(--fb)">Permissão do microfone</div><div class="sub" style="font-size:var(--f-aux);color:'+pi.col+'">'+pi.txt+(pi.st==="denied"?' · ver como liberar':'')+'</div></div></div><span style="color:var(--t3)">›</span></button>'
       +'</div>'
       +rowTg("tgLab","Modo laboratório","grava áudio + linha do tempo do detector (arquivos grandes)",s.lab)+'</div>'
     +'<div class="card"><div class="lbl">Dados</div>'
-      +'<button class="split" data-a="backup" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 15px var(--fb);color:var(--t1)">Exportar backup (JSON)</div><div class="sub" style="font-size:12.5px;color:'+(late?"var(--bad)":"var(--t3)")+'">'+(dexp===null?"nenhum backup feito ainda":dexp===0?"backup feito hoje":plural(dexp,"dia","dias")+" desde o último")+'</div></div><span style="color:var(--t3)">›</span></button>'
-      +'<button class="split" data-a="csv" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 15px var(--fb);color:var(--t1)">Exportar planilha (CSV)</div><div class="sub" style="font-size:12.5px">'+plural(DB.sessions.length,"sessão","sessões")+'</div></div><span style="color:var(--t3)">›</span></button>'
-      +'<button class="split" data-a="importPick" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 15px var(--fb);color:var(--t1)">Importar backup</div><div class="sub" style="font-size:12.5px">mesclar com os atuais ou substituir tudo</div></div><span style="color:var(--t3)">›</span></button>'
-      +'<button class="split" data-a="go" data-v="errlog" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 15px var(--fb);color:var(--t1)">Registro de erros</div><div class="sub" style="font-size:12.5px;color:'+(nerr?"var(--acc)":"var(--t3)")+'">'+(nerr?plural(nerr,"erro registrado","erros registrados"):"nenhum erro registrado")+'</div></div><span style="color:var(--t3)">&#8250;</span></button>'
-      +'<button class="split" data-a="wipe" style="width:100%;background:none;border:0;padding:12px 0 0;text-align:left;cursor:pointer"><div style="font:500 15px var(--fb);color:var(--bad)">Apagar todos os dados</div><span style="color:var(--bad)">›</span></button>'
+      +'<button class="split" data-a="backup" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 var(--f-forte) var(--fb);color:var(--t1)">Exportar backup (JSON)</div><div class="sub" style="font-size:var(--f-aux);color:'+(late?"var(--bad)":"var(--t3)")+'">'+(dexp===null?"nenhum backup feito ainda":dexp===0?"backup feito hoje":plural(dexp,"dia","dias")+" desde o último")+'</div></div><span style="color:var(--t3)">›</span></button>'
+      +'<button class="split" data-a="csv" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 var(--f-forte) var(--fb);color:var(--t1)">Exportar planilha (CSV)</div><div class="sub" style="font-size:var(--f-aux)">'+plural(DB.sessions.length,"sessão","sessões")+'</div></div><span style="color:var(--t3)">›</span></button>'
+      +'<button class="split" data-a="importPick" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 var(--f-forte) var(--fb);color:var(--t1)">Importar backup</div><div class="sub" style="font-size:var(--f-aux)">mesclar com os atuais ou substituir tudo</div></div><span style="color:var(--t3)">›</span></button>'
+      +'<button class="split" data-a="go" data-v="errlog" style="width:100%;background:none;border:0;padding:12px 0;text-align:left;cursor:pointer;border-bottom:1px solid var(--track)"><div><div style="font:500 var(--f-forte) var(--fb);color:var(--t1)">Registro de erros</div><div class="sub" style="font-size:var(--f-aux);color:'+(nerr?"var(--acc)":"var(--t3)")+'">'+(nerr?plural(nerr,"erro registrado","erros registrados"):"nenhum erro registrado")+'</div></div><span style="color:var(--t3)">&#8250;</span></button>'
+      +'<button class="split" data-a="wipe" style="width:100%;background:none;border:0;padding:12px 0 0;text-align:left;cursor:pointer"><div style="font:500 var(--f-forte) var(--fb);color:var(--bad)">Apagar todos os dados</div><span style="color:var(--bad)">›</span></button>'
       +'<input type="file" id="fileImport" accept="application/json" style="display:none"></div>'
     +'<button class="link" data-a="reonboard">Rever primeiros passos</button>'
-    +'<div class="sub" style="font-size:12.5px;text-align:center;padding-top:4px">Cadência v10.6 · tudo salvo neste aparelho</div>'
+    +'<div class="sub" style="font-size:var(--f-aux);text-align:center;padding-top:4px">Cadência v10.7 · tudo salvo neste aparelho</div>'
     +'</div><div style="height:calc(14px + env(safe-area-inset-bottom,0px))"></div></div>';};
 /* CSV com proteção contra fórmula (v7 S7) */
 function exportCSV(){const head=["data","atirador","drill","arma","calibre","distancia_m","tempo_total_s","tempo_1o_tiro_s","tiros","esperados","acertos","erros","pontos","precisao_pct","hit_factor","tempo_corrigido_s","splits_s","zonas","desafio","bloco_id","rep","bloco_tam"];
@@ -2366,24 +2618,24 @@ SCREENS.onboard=()=>{const st=S.onbStep,p=DB.profiles.find(x=>x.id===DB.currentP
   const bar='<div class="prog" style="padding:16px 18px 10px">'+[0,1,2].map(i=>'<i style="background:'+(i===st?"var(--acc)":i<st?"#6b4a22":"var(--bd)")+'"></i>').join("")+'</div>';
   let body,title,kicker,cta;
   if(st===0){kicker="Passo 1 de 3";title="Bem-vindo ao Cadência";
-    body='<div class="sub" style="font-size:14.5px;color:var(--t2)">Um cronômetro de tiro que ouve os seus disparos e guarda a evolução. Tudo fica neste aparelho.</div>'
-      +'<label class="card" style="display:block"><div class="lbl">Seu nome</div><input class="inp" id="onbName" value="'+esc(p.name==="Eu"?"":p.name)+'" placeholder="como aparece no ranking" style="width:100%;margin-top:8px;font:500 16px var(--fb)"></label>'
-      +'<label class="card" style="display:block"><div class="lbl">Clube / stand</div><input class="inp" id="onbClub" value="'+esc(p.clube||"")+'" placeholder="onde você treina" style="width:100%;margin-top:8px;border:1px solid var(--ctl);font:400 15px var(--fb)"></label>';
+    body='<div class="sub" style="font-size:var(--f-base);color:var(--t2)">Um cronômetro de tiro que ouve os seus disparos e guarda a evolução. Tudo fica neste aparelho.</div>'
+      +'<label class="card" style="display:block"><div class="lbl">Seu nome</div><input class="inp" id="onbName" value="'+esc(p.name==="Eu"?"":p.name)+'" placeholder="como aparece no ranking" style="width:100%;margin-top:8px;font:500 var(--f-ttl) var(--fb)"></label>'
+      +'<label class="card" style="display:block"><div class="lbl">Clube / stand</div><input class="inp" id="onbClub" value="'+esc(p.clube||"")+'" placeholder="onde você treina" style="width:100%;margin-top:8px;border:1px solid var(--ctl);font:400 var(--f-ttl) var(--fb)"></label>';
     cta="Continuar";}
   else if(st===1){kicker="Passo 2 de 3";title="Seu material";
-    body='<div class="sub" style="font-size:14.5px;color:var(--t2)">Vai vir escolhido em todo treino — dá para trocar na hora.</div>'
+    body='<div class="sub" style="font-size:var(--f-base);color:var(--t2)">Vai vir escolhido em todo treino — dá para trocar na hora.</div>'
       +'<div class="card"><div class="lbl">Tipo de arma</div><div class="g3">'+GUNS.map(g=>'<button class="opt'+(s.gun===g?" on":"")+'" data-a="gun" data-v="'+g+'">'+g+'</button>').join("")+'</div></div>'
       +'<div class="card"><div class="lbl">Calibre</div><div class="g3">'+calsFor(s.gun).map(c=>'<button class="opt m'+(s.cal===c?" on":"")+'" data-a="cal" data-v="'+esc(c)+'">'+esc(c)+'</button>').join("")+'</div></div>';
     cta="Continuar";}
   else{kicker="Passo 3 de 3";title="Deixe o Cadência ouvir os tiros";
-    body='<div class="card" style="display:flex;flex-direction:column;gap:9px">'+["O beep larga e o mic marca cada tiro","Splits e hit factor saem sozinhos","Nada é gravado nem enviado"].map(t=>'<div style="display:flex;gap:10px;font:400 14.5px var(--fb);color:var(--t2)"><span style="color:var(--ok)">✓</span>'+t+'</div>').join("")+'</div>'
+    body='<div class="card" style="display:flex;flex-direction:column;gap:9px">'+["O beep larga e o mic marca cada tiro","Splits e hit factor saem sozinhos","Nada é gravado nem enviado"].map(t=>'<div style="display:flex;gap:10px;font:400 var(--f-base) var(--fb);color:var(--t2)"><span style="color:var(--ok)">✓</span>'+t+'</div>').join("")+'</div>'
       +(s.micGranted
-        ?'<div class="card split" style="border-color:var(--ok)"><div><div style="font:600 16px var(--fb)">Microfone liberado</div><div class="sub" style="font-size:12.5px">pronto para detectar os tiros</div></div><span style="color:var(--ok);font:700 12px var(--fc);letter-spacing:.14em">✓ LIBERADO</span></div>'
-        :'<button class="btn p" data-a="onbMic" style="flex:none;min-height:60px">Permitir microfone</button><div class="sub" style="font-size:12.5px;text-align:center">o navegador vai pedir a confirmação</div>')
-      +'<div class="sub" style="font-size:13px">Sem microfone dá para treinar em dry-fire: o cronômetro larga e você para no último tiro.</div>';
+        ?'<div class="card split" style="border-color:var(--ok)"><div><div style="font:600 var(--f-ttl) var(--fb)">Microfone liberado</div><div class="sub" style="font-size:var(--f-aux)">pronto para detectar os tiros</div></div><span style="color:var(--ok);font:700 var(--f-aux) var(--fc);letter-spacing:.14em">✓ LIBERADO</span></div>'
+        :'<button class="btn p" data-a="onbMic" style="flex:none;min-height:60px">Permitir microfone</button><div class="sub" style="font-size:var(--f-aux);text-align:center">o navegador vai pedir a confirmação</div>')
+      +'<div class="sub" style="font-size:var(--f-aux)">Sem microfone dá para treinar em dry-fire: o cronômetro larga e você para no último tiro.</div>';
     cta="Ver o app em 3 passos";}
   return '<div class="scr">'+bar
-    +'<div style="padding:8px 18px 12px"><div class="lbl" style="color:var(--acc)">'+kicker+'</div><div style="font:600 27px var(--fb);line-height:1.15;padding-top:4px">'+title+'</div></div>'
+    +'<div style="padding:8px 18px 12px"><div class="lbl" style="color:var(--acc)">'+kicker+'</div><div style="font:600 var(--f-n3) var(--fb);line-height:1.15;padding-top:4px">'+title+'</div></div>'
     +'<div class="body">'+body+'</div>'
     +'<div class="foot" style="flex-direction:column;gap:10px">'
       +'<div style="display:flex;gap:11px;width:100%">'+(st>0?'<button class="btn sq" data-a="onbBack" aria-label="Voltar">'+ic("voltar",20)+'</button>':'')+'<button class="btn p" data-a="onbNext">'+cta+'</button></div>'
@@ -2409,7 +2661,7 @@ function paintTour(){const old=$("#tourOvl");if(old)old.remove();if(S.tour<0||S.
   d.style.cssText="position:absolute;inset:0;z-index:40";
   d.innerHTML='<div style="position:absolute;top:'+(top-6)+'px;left:'+(left-6)+'px;width:'+(r.width+12)+'px;height:'+(r.height+12)+'px;border:2px solid var(--acc);border-radius:16px;box-shadow:0 0 0 4px rgba(255,122,26,.18),0 0 0 9999px rgba(6,8,10,.78);pointer-events:none"></div>'
     +'<div class="sheet" style="position:absolute;left:18px;right:18px;'+(cardTop?"top:"+below+"px":"bottom:"+(a.height-top+14)+"px")+';border-radius:16px;border:1px solid var(--bd);padding:16px">'
-    +'<div class="lbl" style="color:var(--acc)">'+(S.tour+1)+' de 3</div><div style="font:600 19px var(--fb)">'+t[1]+'</div><div class="sub" style="font-size:13.5px;color:var(--t2)">'+t[2]+'</div>'
+    +'<div class="lbl" style="color:var(--acc)">'+(S.tour+1)+' de 3</div><div style="font:600 var(--f-n1) var(--fb)">'+t[1]+'</div><div class="sub" style="font-size:var(--f-base);color:var(--t2)">'+t[2]+'</div>'
     +'<div style="display:flex;gap:11px"><button class="btn" data-a="tourSkip" style="min-height:50px">Pular tour</button><button class="btn p" data-a="tourNext" style="min-height:50px">'+(S.tour===2?"Entendi":"Próximo")+'</button></div></div>';
   app.appendChild(d);}
 Object.assign(ACT,{tourNext:()=>{S.tour=S.tour>=2?-1:S.tour+1;render();},tourSkip:()=>{S.tour=-1;render();}});
@@ -2421,7 +2673,7 @@ const _render3=render;render=function(){_render3();if(S.tour>=0)requestAnimation
    BOTÃO VOLTAR (Android / gesto do navegador) — fecha o que está aberto em vez
    de sair do app; nas telas de execução, não faz nada.
    ============================================================================= */
-const PARENT={errlog:"settings",publicos:"challenges",step1:"home",step2:"step1",detail:"progress",newDrill:"drills",code:"challenges",newChall:"challenges",ranking:"challenges",micperm:"step2",noshot:"step2",drills:"home",progress:"home",challenges:"home",profile:"home",settings:"home",onboard:"home"};
+const PARENT={errlog:"settings",publicos:"challenges",editChal:"ranking",step1:"home",step2:"step1",detail:"progress",newDrill:"drills",code:"challenges",newChall:"challenges",ranking:"challenges",micperm:"step2",noshot:"step2",drills:"home",progress:"home",challenges:"home",profile:"home",settings:"home",onboard:"home"};
 function handleBack(){
   if(S.tour>=0){S.tour=-1;render();return;}
   if(S.menu||S.ask||S.sheet){S.menu=false;S.ask=null;S.sheet="";render();return;}
